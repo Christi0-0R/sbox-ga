@@ -115,19 +115,35 @@ El notebook `notebooks/colab_main.ipynb` monta Google Drive, clona este reposito
 
 ### Ejecución de scripts
 
-Los scripts se ejecutan como módulos desde la raíz del repositorio:
+La forma recomendada, igual en laptop y en Google Colab, es indicar la raíz del repositorio como PYTHONPATH:
 
-```
-python -m tests.medir_velocidad
-```
-
-o, de forma equivalente:
-
+Linux / Mac / Git Bash:
 ```
 PYTHONPATH=. python tests/medir_velocidad.py
 ```
 
-En Colab, antes de ejecutar: `%env PYTHONPATH=`.
+Windows PowerShell:
+```
+$env:PYTHONPATH = "."
+python tests/medir_velocidad.py
+```
+
+Windows CMD:
+```
+set PYTHONPATH=.
+python tests/medir_velocidad.py
+```
+
+Google Colab (en una celda):
+```
+%env PYTHONPATH=.
+!python tests/medir_velocidad.py
+```
+
+Nota: la forma "python -m tests.medir_velocidad" no es la recomendada, porque requiere que existan archivos __init__.py en las carpetas del proyecto y falló en Colab. Los tests se ejecutan siempre con:
+```
+python -m pytest -q
+```
 
 ## 7. Verificación cruzada (Módulo 4)
 
@@ -157,9 +173,10 @@ Limitación: ambas implementaciones las escribió el mismo equipo, por lo que es
 
 ### Fase 1: álgebra de GF(2^8) y evaluador
 
-**Fecha:** [COMPLETAR]
-**Rama / PR:** fase-1-gf256-evaluador / [COMPLETAR: número de PR]
-**Responsables:** [COMPLETAR: quién escribió y quién revisó]
+**Fecha:** 31 de octubre, 2026
+**Rama / PR:** fase-1-gf256-evaluador / Sin PR (pendiente de merge)
+**Responsables:** Christian Regina Rodríguez Magaña
+**Revisión:** SIN REVISION
 
 **Qué se implementó**
 - src/gf256.py: multiplicación en GF(2^8) módulo x^8+x^4+x^3+x+1 (0x11B), inverso multiplicativo, transformación afín y S-box de AES.
@@ -170,21 +187,25 @@ Limitación: ambas implementaciones las escribió el mismo equipo, por lo que es
 
 **Pruebas** (python -m pytest -q)
 - 10 pruebas pasan.
+- Las 10 pruebas también pasan en Google Colab (rama fase-1-gf256-evaluador).
 - Regresión con AES: NL = 112 y δ = 4.
 - Valores conocidos de la S-box de AES (S[0x00]=0x63, S[0x01]=0x7C, S[0x53]=0xED) y ejemplo {57}·{83} = {c1} de FIPS-197.
 - Contraste de ambos evaluadores: cero discrepancias en AES y en 10 permutaciones aleatorias.
 - Cada fila de la DDT suma 256.
 
 **Medición de velocidad (riesgo R2)**
-- Equipo: [COMPLETAR: modelo de la laptop / CPU], Python 3.14.
-- 10.32 ms por evaluación de fitness.
-- 90,000 evaluaciones: aproximadamente 15.5 minutos.
-- Tiempo en Colab: [COMPLETAR cuando se mida].
+
+| Entorno | Python | ms por evaluación | 90,000 evaluaciones |
+|---|---|---|---|
+| Laptop: Alienware x14 R2, CPU: Intel Core i7-13620H (13th Gen, 10 núcleos, 16 hilos). | 3.14 | 10.32 | aprox. 15.5 min |
+| Google Colab | 3.13.18 | 2.84 | aprox. 4.3 min |
+
+Comando usado: %env PYTHONPATH=. y !python tests/medir_velocidad.py
 
 **Supuestos y decisiones**
 - inv(0) = 0, por convención de AES.
 - LAMBDA = 2.0 es provisional. Se calibra en las corridas preliminares y se congela antes de las 60 corridas finales (riesgo R7).
-- La DDT 4x4 usa la S-box de PRESENT. [COMPLETAR: fuente consultada para confirmar los valores.]
+- La DDT 4x4 usa la S-box de PRESENT (Bogdanov et al., 2007). [PENDIENTE: contrastar los valores de analisis/ejemplo_4x4.py con la tabla del artículo.]
 
 **Hito:** regresión con AES aprobada, por lo que se puede avanzar a la Fase 2.
 
