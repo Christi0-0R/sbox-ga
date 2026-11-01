@@ -17,10 +17,32 @@ Se estudia si agregar retroalimentación adaptativa a un algoritmo genético de 
 
 ## 2. Marco metodológico
 
-- **Enfoque:** Ciencia del Diseño (Design Science Research), modelo DSRM de Peffers et al. (2007).
-- **Artefacto:** modelo (March y Smith, 1995) de evolución de S-boxes como optimización sobre permutaciones, con fitness mono-objetivo (NL y δ) y lazo de retroalimentación adaptativa.
-- **Método de evaluación empírica:** experimento computacional cuantitativo (simulación) que compara dos condiciones, estática vs. adaptativa, con 30 ejecuciones independientes por variante y prueba U de Mann-Whitney.
+- **Enfoque:** Ciencia del Diseño (Design Science Research), modelo DSRM de Peffers et al. (2007). En el estándar ACM SIGSOFT esta categoría se llama "Engineering Research".
 - **Estándar de referencia:** ACM SIGSOFT Empirical Standards, "Engineering Research (Design Science)".
+
+### 2.1 Artefacto
+
+El artefacto es un modelo (March y Smith, 1995): la representación de la evolución de S-boxes de 8x8 sobre GF(2^8) como un proceso de optimización sobre permutaciones, con una función de fitness mono-objetivo (NL y δ) y un mecanismo de retroalimentación adaptativa que reorienta la búsqueda a partir del estado de la población.
+
+Se implementa en dos versiones del mismo código:
+
+| Versión | Descripción | Rol |
+|---|---|---|
+| Base (estática) | AG de permutación con parámetros fijos durante toda la ejecución | Línea base de control |
+| Extendida (adaptativa) | El mismo AG con un lazo que ajusta parámetros según diversidad, estancamiento y evolución de NL y δ | Contribución propuesta |
+
+La única diferencia entre versiones es el lazo de control de parámetros. DEAP, NumPy y el evaluador criptográfico son componentes de apoyo, no la contribución.
+
+### 2.2 Método de evaluación empírica
+
+Se usa una **simulación cuantitativa** (tipo iv del estándar ACM SIGSOFT): el artefacto se evalúa en un entorno computacional artificial frente a un artefacto competidor, la versión estática.
+
+- 30 ejecuciones independientes por variante, con las mismas 30 semillas para ambas.
+- Mismos función de fitness, tamaño de población (N) y número de generaciones (G).
+- Prueba U de Mann-Whitney sobre NL, δ y fitness final de cada corrida.
+- Referencia adicional: la S-box de AES (NL = 112, δ = 4) como cota de comparación.
+
+No es un experimento controlado en el sentido del estándar (tipo iii), que requiere participantes humanos.
 
 ## 3. Notación
 
