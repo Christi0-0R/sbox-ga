@@ -91,20 +91,86 @@ python -m pytest -q
 
 El notebook `notebooks/colab_main.ipynb` monta Google Drive, clona este repositorio, instala las dependencias y ejecuta los scripts. Los CSV se escriben a Drive para poder reanudar si la sesión se desconecta.
 
-## 7. Nota sobre sboxU
+### Ejecución de scripts
 
-El protocolo contempla sboxU solo como contraste independiente de NL y δ. La versión 2.0 (instalada desde GitHub) requiere SageMath, por lo que **no está incluida en `requirements.txt`**. El evaluador propio (`src/evaluador.py`) es el principal. La forma del contraste del Módulo 4 (Sage en un entorno aparte o una segunda implementación independiente) está pendiente de definir con el asesor.
+Los scripts se ejecutan como módulos desde la raíz del repositorio:
+
+```
+python -m tests.medir_velocidad
+```
+
+o, de forma equivalente:
+
+```
+PYTHONPATH=. python tests/medir_velocidad.py
+```
+
+En Colab, antes de ejecutar: `%env PYTHONPATH=`.
+
+## 7. Verificación cruzada (Módulo 4)
+
+El protocolo contempla sboxU como contraste independiente de NL y δ. La versión 2.0 (instalada desde GitHub) requiere SageMath, por lo que no está incluida en requirements.txt y su uso sigue pendiente de definir con el asesor.
+
+Mientras tanto, src/verificacion.py contiene una segunda implementación escrita con algoritmos distintos a los del evaluador:
+
+| Métrica | Evaluador (src/evaluador.py) | Contraste (src/verificacion.py) |
+|---|---|---|
+| δ | DDT vectorizada con NumPy | Conteo directo de pares en Python puro |
+| NL | Espectro de Walsh por multiplicación matricial | Transformada rápida de Walsh-Hadamard por función componente |
+
+Limitación: ambas implementaciones las escribió el mismo equipo, por lo que es menos independiente que una herramienta externa. Por eso sboxU sigue siendo deseable si se logra instalar.
 
 ---
 
 ## 8. Estado del proyecto
 
 - [x] Fase 0: repositorio, entorno local, entorno de Colab y pruebas funcionando
-- [ ] Fase 1: álgebra de GF(2^8) y evaluador, con regresión contra AES (NL = 112, δ = 4)
+- [X] Fase 1: álgebra de GF(2^8) y evaluador, con regresión contra AES (NL = 112, δ = 4)
 - [ ] Fase 2: motor evolutivo (estático, corridas preliminares, adaptativo)
 - [ ] Fase 3: 60 corridas y verificación cruzada
 - [ ] Fase 4: análisis estadístico, cifrado de archivos y comparación con AES
 - [ ] Fase 5: documento final
+
+## 8.1 Bitácora de fases
+
+### Fase 1: álgebra de GF(2^8) y evaluador
+
+**Fecha:** [COMPLETAR]
+**Rama / PR:** fase-1-gf256-evaluador / [COMPLETAR: número de PR]
+**Responsables:** [COMPLETAR: quién escribió y quién revisó]
+
+**Qué se implementó**
+- src/gf256.py: multiplicación en GF(2^8) módulo x^8+x^4+x^3+x+1 (0x11B), inverso multiplicativo, transformación afín y S-box de AES.
+- src/evaluador.py: DDT, espectro de Walsh (LAT = Walsh/2), NL, δ y fitness mono-objetivo.
+- src/verificacion.py: segunda implementación independiente de NL y δ.
+- analisis/ejemplo_4x4.py: ejemplo didáctico de DDT con una S-box de 4 bits (no es parte de la evaluación).
+- pytest.ini: configura pytest para encontrar el paquete src.
+
+**Pruebas** (python -m pytest -q)
+- 10 pruebas pasan.
+- Regresión con AES: NL = 112 y δ = 4.
+- Valores conocidos de la S-box de AES (S[0x00]=0x63, S[0x01]=0x7C, S[0x53]=0xED) y ejemplo {57}·{83} = {c1} de FIPS-197.
+- Contraste de ambos evaluadores: cero discrepancias en AES y en 10 permutaciones aleatorias.
+- Cada fila de la DDT suma 256.
+
+**Medición de velocidad (riesgo R2)**
+- Equipo: [COMPLETAR: modelo de la laptop / CPU], Python 3.14.
+- 10.32 ms por evaluación de fitness.
+- 90,000 evaluaciones: aproximadamente 15.5 minutos.
+- Tiempo en Colab: [COMPLETAR cuando se mida].
+
+**Supuestos y decisiones**
+- inv(0) = 0, por convención de AES.
+- LAMBDA = 2.0 es provisional. Se calibra en las corridas preliminares y se congela antes de las 60 corridas finales (riesgo R7).
+- La DDT 4x4 usa la S-box de PRESENT. [COMPLETAR: fuente consultada para confirmar los valores.]
+
+**Hito:** regresión con AES aprobada, por lo que se puede avanzar a la Fase 2.
+
+**Pendientes heredados**
+- Definir con el asesor cómo se hará el contraste con sboxU (requiere Sage).
+- Agregar como referencia valores de NL y δ reportados en la literatura (Picek et al., 2016; Clark et al., 2004), extraídos directamente de los artículos.
+
+---
 
 ## 9. Referencias principales
 
