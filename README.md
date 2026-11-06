@@ -213,6 +213,60 @@ Comando usado: %env PYTHONPATH=. y !python tests/medir_velocidad.py
 - Definir con el asesor cómo se hará el contraste con sboxU (requiere Sage).
 - Agregar como referencia valores de NL y δ reportados en la literatura (Picek et al., 2016; Clark et al., 2004), extraídos directamente de los artículos.
 
+
+### Fase 2: motor evolutivo
+
+**Fecha:** 5 de noviembre, 2026
+**Rama / PR:** fase-2-motor / Sin PR (pendiente de merge)
+**Responsables:** Christian Regina Rodríguez Magaña
+**Revisión:** SIN REVISION
+**Atributos del estándar ACM SIGSOFT que cubre:** descripción del artefacto (1), supuestos explícitos (8), evaluación conceptual (3, pendiente).
+
+**Qué se implementó**
+- experimentos/config.py: parámetros compartidos (N = 30, G = 50, cxpb, mutpb, indpb, k, parámetros del lazo adaptativo), semillas finales (1000 a 1029) y semillas preliminares (1 a 5).
+- src/motor_ga.py: AG de permutación con DEAP (torneo, PMX, mutShuffleIndexes, elitismo). Una sola base de código para ambas variantes; la única diferencia es la llamada a actualizar_parametros.
+- La diversidad se estima como distancia de Hamming media normalizada sobre 100 pares muestreados, con un generador aleatorio independiente para no alterar la secuencia de la evolución.
+- experimentos/prelim_estatica.py, experimentos/calibracion.py, analisis/graficas_prelim.py, analisis/resumen_prelim.py.
+
+**Pruebas** (python -m pytest -q)
+- 15 pruebas pasan (10 de la fase 1 y 5 del motor).
+- Corrida válida (el mejor es permutación), reproducibilidad (misma semilla, mismo CSV), la adaptativa corre, ambas variantes parten de la misma población inicial, y PMX y mutación preservan la permutación en 300 repeticiones.
+- [PENDIENTE: prueba en Colab]
+
+**Tiempos**
+- Corrida de 50 generaciones con N = 30: 1.8 a 2.1 s (la primera, 7.3 s por arranque en frío). Estimación de las 60 corridas finales: unos 2 minutos.
+- Calibración (14 configuraciones x 5 semillas, aprox. 70 corridas): unos 30 s (estimado, no cronometrado). Laptop, Python 3.14.
+
+**Resultados de las corridas preliminares de la estática (semillas 1 a 5)**
+- Fitness final: 86.0 en las 5 corridas. NL final = 98 y δ = 10 en todas.
+- La diversidad pasa de aprox. 1.0 (generación 0) a 0.02 a 0.04 hacia la generación 25: convergencia prematura observada en los datos.
+- δ no cambió en ninguna corrida: toda la mejora vino de NL.
+
+**Calibración preliminar (semillas 1 a 5)**
+- 14 configuraciones (2 estáticas de control y 12 adaptativas con div_min en {0.05, 0.1, 0.2, 0.5} y ventana en {3, 5, 8}).
+- Fitness entre 85.6 y 86.4 en todas; diferencias dentro del ruido con 5 semillas. δ = 10 casi siempre.
+- La regla adaptativa inicial mantiene mutpb cerca del tope (0.67 a 0.79) y se comporta como una estática con mutpb = 0.8 (diversidad media 0.26 a 0.43 frente a 0.445). Con ese diseño, una mejora no podría atribuirse a la retroalimentación.
+- Con div_min entre 0.05 y 0.2 los resultados son casi idénticos: el umbral de diversidad pesa poco y manda ventana.
+
+**Supuestos y decisiones**
+- Las semillas 1 a 5 se usan solo para calibrar; no son evidencia de H1.
+- No se eligió configuración por diferencias de 0.4 puntos de fitness (ruido); el criterio es funcional (que mutpb suba y baje).
+- [PENDIENTE: valores congelados de CFG y LAMBDA, con su justificación]
+- [PENDIENTE: esfuerzo de calibración equivalente para la estática]
+
+**Evaluación conceptual del mecanismo adaptativo (atributo 3)**
+- Fortaleza: reacciona a la pérdida de diversidad sin intervención manual; la diferencia entre variantes queda aislada en un solo mecanismo.
+- Debilidad: depende de umbrales (ventana, div_min) que se calibran con pocas semillas.
+- Límite: δ es un máximo y da poca señal de gradiente, por lo que la retroalimentación puede no tener efecto sobre esa métrica.
+- [PENDIENTE: costo de medir diversidad y sensibilidad a los umbrales, una vez rediseñado el lazo]
+
+**Pendientes con el asesor**
+- Forma de la señal de δ en el fitness (contar celdas en el máximo, además del máximo).
+- Tamaño de muestra: con corridas de unos 2 s, la restricción de cómputo que justificaba n = 30 en el protocolo deja de aplicar; la justificación sería la potencia estadística.
+- Contraste con sboxU (requiere Sage) y comparación con el estado del arte (heredados de la fase 1).
+
+**Hito:** [PENDIENTE: parámetros congelados]
+
 ---
 
 ## 9. Referencias principales
