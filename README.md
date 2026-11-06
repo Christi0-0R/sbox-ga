@@ -174,8 +174,11 @@ Limitación: ambas implementaciones las escribió el mismo equipo, por lo que es
 ### Fase 1: álgebra de GF(2^8) y evaluador
 
 **Fecha:** 31 de octubre, 2026
+
 **Rama / PR:** fase-1-gf256-evaluador / Sin PR (pendiente de merge)
+
 **Responsables:** Christian Regina Rodríguez Magaña
+
 **Revisión:** SIN REVISION
 
 **Qué se implementó**
@@ -217,9 +220,13 @@ Comando usado: %env PYTHONPATH=. y !python tests/medir_velocidad.py
 ### Fase 2: motor evolutivo
 
 **Fecha:** 5 de noviembre, 2026
+
 **Rama / PR:** fase-2-motor / Sin PR (pendiente de merge)
+
 **Responsables:** Christian Regina Rodríguez Magaña
+
 **Revisión:** SIN REVISION
+
 **Atributos del estándar ACM SIGSOFT que cubre:** descripción del artefacto (1), supuestos explícitos (8), evaluación conceptual (3, pendiente).
 
 **Qué se implementó**
