@@ -164,7 +164,7 @@ Limitación: ambas implementaciones las escribió el mismo equipo, por lo que es
 
 - [x] Fase 0: repositorio, entorno local, entorno de Colab y pruebas funcionando
 - [X] Fase 1: álgebra de GF(2^8) y evaluador, con regresión contra AES (NL = 112, δ = 4)
-- [ ] Fase 2: motor evolutivo (estático, corridas preliminares, adaptativo)
+- [X] Fase 2: motor evolutivo (estático, corridas preliminares, adaptativo)
 - [ ] Fase 3: 60 corridas y verificación cruzada
 - [ ] Fase 4: análisis estadístico, cifrado de archivos y comparación con AES
 - [ ] Fase 5: documento final
