@@ -42,3 +42,14 @@ def test_contraste_independiente_en_aleatorias():
 
 def test_fitness_aes():
     assert fitness(aes_sbox()) == 112.0
+
+
+def test_metricas_y_fitness_de_son_consistentes():
+    from src.evaluador import metricas, fitness_de
+    p = list(range(256))
+    random.Random(3).shuffle(p)
+    n, d = metricas(p)
+    assert (n, d) == (nl(p), delta(p))
+    assert fitness(p) == fitness_de(n, d)
+    assert fitness_de(112, 4) == 112.0
+    assert fitness_de(98, 10, lam=2.0) == 86.0
