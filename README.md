@@ -89,8 +89,9 @@ sbox-ga/
 
 ## 6. Entorno
 
-- **Laptop (desarrollo):** Python 3.14, entorno virtual `.venv`.
-- **Google Colab (experimentos):** Python, salida de `!python --version.
+
+- **Laptop (desarrollo):** Python 3.10 o superior (se desarrolla con 3.14), entorno virtual `.venv`.
+- **Google Colab (experimentos):** la versión de Python y de cada librería se guarda en `entorno.txt` de cada corrida.
 - **Dependencias:** ver `requirements.txt` (numpy, scipy, pandas, matplotlib, deap, pytest).
 
 ### Instalación
