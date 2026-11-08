@@ -32,3 +32,7 @@ def nl_fwht(sbox):
         f = [1 - 2 * (bin(sbox[x] & b).count("1") & 1) for x in range(256)]
         mejor = max(mejor, max(abs(t) for t in _fwht(f)))
     return 128 - mejor // 2
+
+def metricas_sboxu(sbox):
+    from sboxU import differential_uniformity, linearity # falla sin Sage
+    return 128 - int(linearity(sbox)) // 2, int(differential_uniformity(sbox))

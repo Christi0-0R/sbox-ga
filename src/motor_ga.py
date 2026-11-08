@@ -124,7 +124,7 @@ def correr(semilla, adaptativo, cfg, ruta_csv):
     if d:
         os.makedirs(d, exist_ok=True)
     with open(ruta_csv, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=list(filas[0].keys()))
+        w = csv.DictWriter(f, fieldnames=list(filas[0].keys()), lineterminator="\n")
         w.writeheader()
         w.writerows(filas)
     return hof[0]
