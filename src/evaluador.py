@@ -36,10 +36,19 @@ def nl(sbox):
     W = walsh(sbox)
     return int(128 - np.abs(W[:, 1:]).max() // 2)
 
+def metricas(sbox):
+    return nl(sbox), delta(sbox)
+    # NL y delta de una sbox, cada una calculada una sola vez
+
 # Provisional: se fija con las corridas preliminares (riesgo R7)
 LAMBDA = 2.0
 
+def fitness_de(nl_, delta_, lam = LAMBDA):
+    return float(nl_ - lam * (delta_ - 4))
+    # mono-objetivo agregado a partir de NL y delta ya calculados
+
+
 def fitness(sbox, lam = LAMBDA):
     # Mono-objetivo agregado: NL - lam * (delta - 4)
-    return float(nl(sbox) - lam * (delta(sbox) - 4))
-
+    n, d = metricas(sbox)
+    return fitness_de(n, d, lam)

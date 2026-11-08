@@ -10,6 +10,7 @@ CFG = dict(
     mutpb=0.2,       # PROVISIONAL: prob. de mutación base
     indpb=0.02,      # PROVISIONAL: prob. de intercambio por posición
     k=3,             # tamaño de torneo
+    lam=2.0,         # PROVISIONAL: peso de delta en el fitness (R7)
     # --- solo variante adaptativa (se calibran con la 1ra vuelta) ---
     ventana=5,       # PLACEHOLDER: generaciones sin mejora = estancamiento
     div_min=0.5,     # PLACEHOLDER: umbral de diversidad

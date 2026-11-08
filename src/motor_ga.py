@@ -11,7 +11,7 @@ import random
 import numpy as np
 from deap import base, creator, tools
 
-from src.evaluador import nl, delta, fitness
+from src.evaluador import metricas, fitness_de 
 
 if not hasattr(creator, "FitnessMax"):
     creator.create("FitnessMax", base.Fitness, weights=(1.0,))
@@ -20,8 +20,11 @@ if not hasattr(creator, "FitnessMax"):
 N_PARES_DIV = 100  # pares muestreados para estimar la diversidad
 
 
-def _evaluar(ind):
-    return (fitness(ind),)
+def _evaluar(ind, lam):
+    # Calcula NL y delta una vez, los guarda en el individuo y fija su fitness
+    n, d = metricas(ind)
+    ind.nl, ind.delta = n, d
+    ind.fitness.values = (fitness_de(n, d, lam),)
 
 
 def diversidad(pop, rng):
@@ -50,6 +53,29 @@ def actualizar_parametros(mutpb, sin_mejora, div, cfg):
     return max(mutpb / cfg["factor"], cfg["mutpb"])
 
 
+def _descendencia(pop, cxpb, mutpb, cfg, lam):
+    '''
+    Selección por torneo, cruce PMX, mutación y evaluación de los descendientes
+    Todo individuo que sale de aquí tiene fitness, NL y delta vigentes
+    '''
+
+    off = tools.selTournament(pop, len(pop), tournsize=cfg["k"])
+    off = [copy.deepcopy(i) for i in off]
+    for a, b in zip(off[::2], off[1::2]):
+        if random.random() < cxpb:
+            tools.cxPartialyMatched(a, b)
+            del a.fitness.values
+            del b.fitness.values
+    for ind in off:
+        if random.random() < mutpb:
+            tools.mutShuffleIndexes(ind, indpb=cfg["indpb"])
+            del ind.fitness.values
+    for ind in off:
+        if not ind.fitness.valid:
+            _evaluar(ind, lam)
+    return off
+
+
 def correr(semilla, adaptativo, cfg, ruta_csv):
     random.seed(semilla)
     rng_div = random.Random(semilla + 7919)   # generador independiente para la diversidad
@@ -59,8 +85,9 @@ def correr(semilla, adaptativo, cfg, ruta_csv):
         perm = list(range(256))
         random.shuffle(perm)
         pop.append(creator.Individual(perm))
+    lam = cfg["lam"]
     for ind in pop:
-        ind.fitness.values = _evaluar(ind)
+        _evaluar(ind, lam)
 
     hof = tools.HallOfFame(1)
     hof.update(pop)
@@ -86,8 +113,11 @@ def correr(semilla, adaptativo, cfg, ruta_csv):
 
         filas.append(dict(
             variante=nombre, semilla=semilla, generacion=g,
-            fit_mejor=mejor.fitness.values[0], fit_prom=float(np.mean(fits)),
-            nl_mejor=nl(mejor), delta_mejor=delta(mejor),
+            fit_mejor=mejor.fitness.values[0], fit_max_pob=max(fits),
+            fit_prom=float(np.mean(fits)),
+            nl_mejor=mejor.nl, delta_mejor=mejor.delta,
+            nl_prom=float(np.mean([i.nl for i in pop])),
+            delta_prom=float(np.mean([i.delta for i in pop])),
             diversidad=round(div, 6), sin_mejora=sin_mejora,
             mutpb=mutpb, cxpb=cxpb))
         if g == cfg["G"]:
@@ -98,20 +128,7 @@ def correr(semilla, adaptativo, cfg, ruta_csv):
             mutpb = actualizar_parametros(mutpb, sin_mejora, div, cfg)
 
         # selección, cruce, mutación
-        off = tools.selTournament(pop, len(pop), tournsize=cfg["k"])
-        off = [copy.deepcopy(i) for i in off]
-        for a, b in zip(off[::2], off[1::2]):
-            if random.random() < cxpb:
-                tools.cxPartialyMatched(a, b)
-                del a.fitness.values
-                del b.fitness.values
-        for ind in off:
-            if random.random() < mutpb:
-                tools.mutShuffleIndexes(ind, indpb=cfg["indpb"])
-                del ind.fitness.values
-        for ind in off:
-            if not ind.fitness.valid:
-                ind.fitness.values = _evaluar(ind)
+        off = _descendencia(pop, cxpb, mutpb, cfg, lam)
 
         # elitismo: el mejor histórico sustituye al peor de la nueva generación
         elite = copy.deepcopy(hof[0])
