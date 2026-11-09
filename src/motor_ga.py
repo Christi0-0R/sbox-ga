@@ -11,7 +11,7 @@ import random
 import numpy as np
 from deap import base, creator, tools
 
-from src.evaluador import metricas, fitness_de 
+from src.evaluador import metricas, fitness_de
 
 if not hasattr(creator, "FitnessMax"):
     creator.create("FitnessMax", base.Fitness, weights=(1.0,))
@@ -42,24 +42,42 @@ def diversidad(pop, rng):
     return total / N_PARES_DIV
 
 
-def actualizar_parametros(mutpb, sin_mejora, div, cfg):
+def explorando(p, cfg):
+    # La variante está en modo explorar si usa el tamaño de torneo de exploración
+    return cfg["k_explorar"] != cfg["k"] and p["k"] == cfg["k_explorar"]
+
+
+def actualizar_parametros(p, ind, cfg):
     '''
-    PLACEHOLDER de la variante adaptativa; se refina tras la 1ª vuelta
-    Estancamiento o poca diversidad -> sube mutación; si no, la relaja hacia la base
+    Regla de la variante adaptativa (función pura, no modifica sus argumentos)
+    p:   parámetros vigentes {mutpb, indpb, k}
+    ind: indicadores {sin_mejora_nl, sin_mejora_delta, div}
+    Dos modos, con histéresis para que no se quede atorada en uno:
+      EXPLOTAR (parámetros base, los de la estática). Pasa a explorar si la búsqueda
+        está estancada (NL y delta >= ventana generaciones sin mejorar su mejor valor)
+        o si la diversidad cae por debajo de div_min
+      EXPLORAR: sube mutpb e indpb (hasta sus topes) y baja el torneo a k_explorar.
+        Regresa a explotar cuando la diversidad se recupera (>= div_rec)
     '''
 
-    if sin_mejora >= cfg["ventana"] or div < cfg["div_min"]:
-        return min(mutpb * cfg["factor"], cfg["mutpb_max"])
-    return max(mutpb / cfg["factor"], cfg["mutpb"])
+    if explorando(p, cfg) and ind["div"] >= cfg["div_rec"]:
+        return dict(mutpb=cfg["mutpb"], indpb=cfg["indpb"], k=cfg["k"])
+    estancada = (ind["sin_mejora_nl"] >= cfg["ventana"]
+                 and ind["sin_mejora_delta"] >= cfg["ventana"])
+    if explorando(p, cfg) or estancada or ind["div"] < cfg["div_min"]:
+        return dict(mutpb=min(p["mutpb"] * cfg["factor"], cfg["mutpb_max"]),
+                    indpb=min(p["indpb"] * cfg["factor"], cfg["indpb_max"]),
+                    k=cfg["k_explorar"])
+    return dict(p)
 
 
-def _descendencia(pop, cxpb, mutpb, cfg, lam):
+def _descendencia(pop, cxpb, mutpb, indpb, k, lam):
     '''
     Selección por torneo, cruce PMX, mutación y evaluación de los descendientes
     Todo individuo que sale de aquí tiene fitness, NL y delta vigentes
     '''
 
-    off = tools.selTournament(pop, len(pop), tournsize=cfg["k"])
+    off = tools.selTournament(pop, len(pop), tournsize=k)
     off = [copy.deepcopy(i) for i in off]
     for a, b in zip(off[::2], off[1::2]):
         if random.random() < cxpb:
@@ -68,7 +86,7 @@ def _descendencia(pop, cxpb, mutpb, cfg, lam):
             del b.fitness.values
     for ind in off:
         if random.random() < mutpb:
-            tools.mutShuffleIndexes(ind, indpb=cfg["indpb"])
+            tools.mutShuffleIndexes(ind, indpb=indpb)
             del ind.fitness.values
     for ind in off:
         if not ind.fitness.valid:
@@ -92,9 +110,12 @@ def correr(semilla, adaptativo, cfg, ruta_csv):
     hof = tools.HallOfFame(1)
     hof.update(pop)
 
-    cxpb, mutpb = cfg["cxpb"], cfg["mutpb"]
+    cxpb = cfg["cxpb"]
+    par = dict(mutpb=cfg["mutpb"], indpb=cfg["indpb"], k=cfg["k"])
     mejor_hist = hof[0].fitness.values[0]
-    sin_mejora = 0
+    nl_hist = max(i.nl for i in pop)          # mejor NL de la población, histórico
+    delta_hist = min(i.delta for i in pop)    # mejor delta de la población, histórico
+    sin_mejora = sin_mejora_nl = sin_mejora_delta = 0
     nombre = "adaptativa" if adaptativo else "estatica"
     filas = []
 
@@ -110,25 +131,43 @@ def correr(semilla, adaptativo, cfg, ruta_csv):
                 sin_mejora = 0
             else:
                 sin_mejora += 1
+            if max(i.nl for i in pop) > nl_hist:
+                nl_hist = max(i.nl for i in pop)
+                sin_mejora_nl = 0
+            else:
+                sin_mejora_nl += 1
+            if min(i.delta for i in pop) < delta_hist:
+                delta_hist = min(i.delta for i in pop)
+                sin_mejora_delta = 0
+            else:
+                sin_mejora_delta += 1
 
         filas.append(dict(
             variante=nombre, semilla=semilla, generacion=g,
             fit_mejor=mejor.fitness.values[0], fit_max_pob=max(fits),
             fit_prom=float(np.mean(fits)),
             nl_mejor=mejor.nl, delta_mejor=mejor.delta,
+            nl_max_pob=max(i.nl for i in pop), delta_min_pob=min(i.delta for i in pop),
             nl_prom=float(np.mean([i.nl for i in pop])),
             delta_prom=float(np.mean([i.delta for i in pop])),
             diversidad=round(div, 6), sin_mejora=sin_mejora,
-            mutpb=mutpb, cxpb=cxpb))
+            sin_mejora_nl=sin_mejora_nl, sin_mejora_delta=sin_mejora_delta,
+            mutpb=par["mutpb"], indpb=par["indpb"], k=par["k"], cxpb=cxpb))
         if g == cfg["G"]:
             break
 
         # ÚNICA diferencia entre variantes:
         if adaptativo:
-            mutpb = actualizar_parametros(mutpb, sin_mejora, div, cfg)
+            antes = explorando(par, cfg)
+            par = actualizar_parametros(
+                par, dict(sin_mejora_nl=sin_mejora_nl,
+                          sin_mejora_delta=sin_mejora_delta, div=div), cfg)
+            if antes and not explorando(par, cfg):
+                # terminó una fase de exploración: el estancamiento se mide desde cero
+                sin_mejora_nl = sin_mejora_delta = 0
 
         # selección, cruce, mutación
-        off = _descendencia(pop, cxpb, mutpb, cfg, lam)
+        off = _descendencia(pop, cxpb, par["mutpb"], par["indpb"], par["k"], lam)
 
         # elitismo: el mejor histórico sustituye al peor de la nueva generación
         elite = copy.deepcopy(hof[0])

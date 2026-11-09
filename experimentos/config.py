@@ -1,22 +1,25 @@
 '''
 Configuración compartida por ambas variantes
-Los valores PROVISIONAL se congelan antes de las 60 corridas
+Los valores PROVISIONAL se congelan antes de las corridas finales
 '''
 
 CFG = dict(
-    N=30,            # tamaño de población (fijo por la hipótesis)
-    G=50,            # generaciones (fijo por la hipótesis)
-    cxpb=0.9,        # PROVISIONAL: prob. de cruce
-    mutpb=0.2,       # PROVISIONAL: prob. de mutación base
-    indpb=0.02,      # PROVISIONAL: prob. de intercambio por posición
-    k=3,             # tamaño de torneo
-    lam=2.0,         # PROVISIONAL: peso de delta en el fitness (R7)
-    # --- solo variante adaptativa (se calibran con la 1ra vuelta) ---
-    ventana=5,       # PLACEHOLDER: generaciones sin mejora = estancamiento
-    div_min=0.5,     # PLACEHOLDER: umbral de diversidad
-    factor=1.5,      # PLACEHOLDER: factor de ajuste de mutpb
-    mutpb_max=0.8,   # PLACEHOLDER: tope de mutpb
+    N=100,           # población (calibración etapa 3)
+    G=100,           # generaciones (calibración etapa 3)
+    cxpb=0.9,        # probabilidad de cruce
+    mutpb=0.4,       # calibrado (etapa 3.5)
+    indpb=0.02,      # calibrado (etapa 3.5)
+    k=5,             # calibrado (etapa 3.5): tamaño de torneo
+    lam=2.0,         # FIJO: decisión metodológica (R7)
+    # --- solo variante adaptativa ---
+    k_explorar=3,    # FIJO: k al explorar (decidido antes de calibrar)
+    mutpb_max=0.8,   # FIJO: tope de mutpb (decidido antes de calibrar)
+    indpb_max=0.1,   # FIJO: tope de indpb (decidido antes de calibrar)
+    div_rec=0.6,     # FIJO: diversidad con la que se termina de explorar (decidido antes de calibrar)
+    ventana=10,      # PROVISIONAL: generaciones sin mejora = estancamiento
+    div_min=0.15,    # PROVISIONAL: diversidad por debajo de la cual se explora
+    factor=1.5,      # PROVISIONAL: factor de ajuste
 )
 
-SEMILLAS_FINALES = list(range(1000, 1030))   # 30 semillas, iguales en ambas variantes
-SEMILLAS_PRELIM = list(range(1, 21))         # 20 semillas, solo para calibrar
+SEMILLAS_FINALES = list(range(1000, 1100))   # n = 100 por variante, iguales en ambas
+SEMILLAS_PRELIM = list(range(1, 21))         # 20 semillas, solo para calibrar, nunca para el análisis final

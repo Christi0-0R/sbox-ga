@@ -53,3 +53,21 @@ def test_metricas_y_fitness_de_son_consistentes():
     assert fitness(p) == fitness_de(n, d)
     assert fitness_de(112, 4) == 112.0
     assert fitness_de(98, 10, lam=2.0) == 86.0
+
+
+
+def test_fuerza_del_ataque_en_aes():
+    from src.evaluador import sesgo_lineal, prob_diferencial
+    assert sesgo_lineal(112) == 2 ** -4        # 0.0625
+    assert prob_diferencial(4) == 2 ** -6      # 0.015625
+
+
+def test_sesgo_lineal_coincide_con_el_espectro_de_walsh():
+    # Contraste independiente: el sesgo calculado desde NL debe igualar max|W| / 512
+    import numpy as np
+    from src.evaluador import sesgo_lineal, walsh
+    for semilla in range(5):
+        p = list(range(256))
+        random.Random(semilla).shuffle(p)
+        directo = np.abs(walsh(p)[:, 1:]).max() / 512
+        assert sesgo_lineal(nl(p)) == directo

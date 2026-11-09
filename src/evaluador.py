@@ -52,3 +52,15 @@ def fitness(sbox, lam = LAMBDA):
     # Mono-objetivo agregado: NL - lam * (delta - 4)
     n, d = metricas(sbox)
     return fitness_de(n, d, lam)
+
+
+# ---- Fuerza del mejor ataque (modelo de atacante sobre las tablas LAT y DDT)
+
+def sesgo_lineal(nl_):
+    # Sesgo del mejor ataque lineal: la aproximación se cumple con prob. 1/2 +- sesgo
+    # Equivale a max|W| / 512 = (128 - NL) / 256. Menor es mejor para el diseñador
+    return (128 - nl_) / 256
+
+def prob_diferencial(delta_):
+    # Probabilidad del mejor ataque diferencial: delta / 256. Menor es mejor
+    return delta_ / 256
