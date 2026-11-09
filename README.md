@@ -444,6 +444,13 @@ La exploración parece costar mejora a corto plazo y recuperarse gradualmente, s
 
 ---
 
+**Contraste con sboxU (8 y 9 de noviembre, 2026)**
+- sboxU 2.0 compilado en Colab con Sage de conda-forge (micromamba, entorno aparte; condacolab falló con HTTP 504 al bajar Miniforge). Se usó el Python del entorno (`python -m pip install --no-build-isolation`), porque el `sage` de conda-forge ya no acepta `-pip` ni `-python`.
+- `experimentos/contraste_sboxu.py`: AES + 50 permutaciones aleatorias (semilla 0). Resultado: 51/51 coinciden en (NL, δ) entre `evaluador.py`, `verificacion.py` (FWHT y conteo directo) y sboxU. `tests/test_sboxu.py` pasa (ya no se salta).
+- Cierra el riesgo R1. En requirements.txt sboxU sigue sin listarse: solo es instalable con Sage.
+
+---
+
 ## 9. Referencias principales
 
 - Hevner, A. R., March, S. T., Park, J., y Ram, S. (2004). Design science in information systems research. MIS Quarterly, 28(1), 75-105.
