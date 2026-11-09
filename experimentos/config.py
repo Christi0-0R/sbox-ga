@@ -19,4 +19,4 @@ CFG = dict(
 )
 
 SEMILLAS_FINALES = list(range(1000, 1030))   # 30 semillas, iguales en ambas variantes
-SEMILLAS_PRELIM = [1, 2, 3, 4, 5]            # solo para calibrar, nunca para el análisis final
+SEMILLAS_PRELIM = list(range(1, 21))         # 20 semillas, solo para calibrar
