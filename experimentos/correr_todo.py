@@ -148,26 +148,47 @@ def correr_todo(directorio, cfg, semillas, variantes=VARIANTES, workers=None):
     return len(faltan)
 
 
+# Diseno del experimento suplementario, declarado ANTES de correrlo (exploratorio):
+# solo cambia G; N, parametros y lam son los congelados. Semillas = las primeras n finales.
+SUPLEMENTARIO = dict(G=300, n_semillas=40)
+
+
+def configuracion(a):
+    """Devuelve (cfg, semillas, directorio) segun los argumentos. Pura, para poder probarla."""
+    if a.smoke and a.suplementario:
+        raise SystemExit("--smoke y --suplementario no se combinan")
+    if a.smoke:
+        return dict(CFG, N=20, G=10), SEMILLAS_FINALES[:3], a.dir or "resultados/smoke"
+    cfg = dict(CFG)
+    if cfg != CFG_CONGELADA:
+        dif = {k: (cfg.get(k), CFG_CONGELADA[k]) for k in CFG_CONGELADA if cfg.get(k) != CFG_CONGELADA[k]}
+        raise SystemExit(f"config.py no coincide con la configuracion congelada "
+                         f"(actual, congelada): {dif}")
+    if a.suplementario:
+        cfg = dict(CFG_CONGELADA, G=a.G if a.G is not None else SUPLEMENTARIO["G"])
+        n = a.n_semillas if a.n_semillas is not None else SUPLEMENTARIO["n_semillas"]
+        if cfg["G"] == CFG_CONGELADA["G"]:
+            raise SystemExit("el suplementario debe usar una G distinta de la final")
+        if not 1 <= n <= len(SEMILLAS_FINALES):
+            raise SystemExit(f"n_semillas debe estar entre 1 y {len(SEMILLAS_FINALES)}")
+        return cfg, SEMILLAS_FINALES[:n], a.dir or f"resultados/suplementario_G{cfg['G']}"
+    if a.G is not None or a.n_semillas is not None:
+        raise SystemExit("--G y --n-semillas solo se permiten con --suplementario")
+    return cfg, SEMILLAS_FINALES, a.dir or "resultados/final"
+
+
 def principal(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--dir", default=None, help="directorio de salida")
     ap.add_argument("--workers", type=int, default=None)
     ap.add_argument("--smoke", action="store_true",
                     help="prueba rapida (3 semillas, N=20, G=10); NO es resultado")
+    ap.add_argument("--suplementario", action="store_true",
+                    help="experimento EXPLORATORIO: solo cambia G (por defecto 300, 40 semillas)")
+    ap.add_argument("--G", type=int, default=None, help="solo con --suplementario")
+    ap.add_argument("--n-semillas", type=int, default=None, help="solo con --suplementario")
     a = ap.parse_args(argv)
-
-    if a.smoke:
-        cfg = dict(CFG, N=20, G=10)
-        semillas = SEMILLAS_FINALES[:3]
-        directorio = a.dir or "resultados/smoke"
-    else:
-        cfg = dict(CFG)
-        if cfg != CFG_CONGELADA:
-            dif = {k: (cfg.get(k), CFG_CONGELADA[k]) for k in CFG_CONGELADA if cfg.get(k) != CFG_CONGELADA[k]}
-            raise SystemExit(f"config.py no coincide con la configuracion congelada "
-                             f"(actual, congelada): {dif}")
-        semillas = SEMILLAS_FINALES
-        directorio = a.dir or "resultados/final"
+    cfg, semillas, directorio = configuracion(a)
     return correr_todo(directorio, cfg, semillas, workers=a.workers)
 
 

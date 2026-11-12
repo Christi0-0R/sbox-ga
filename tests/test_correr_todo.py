@@ -96,3 +96,45 @@ def test_cada_variante_se_ejecuta_con_su_modo(tmp_path, monkeypatch, aleatoria_f
     ct.correr_todo(str(tmp_path / "r"), CFG_MINI, [1000], workers=1)
     assert llamadas[(1000, "estatica")] is False
     assert llamadas[(1000, "adaptativa")] is True
+
+
+# --- experimento suplementario ---
+def _args(**kw):
+    import argparse
+    base = dict(dir=None, workers=None, smoke=False, suplementario=False, G=None, n_semillas=None)
+    base.update(kw)
+    return argparse.Namespace(**base)
+
+
+def test_suplementario_solo_cambia_G_y_semillas():
+    cfg, semillas, d = ct.configuracion(_args(suplementario=True))
+    assert cfg == dict(ct.CFG_CONGELADA, G=300)
+    assert semillas == config.SEMILLAS_FINALES[:40] and d == "resultados/suplementario_G300"
+
+
+def test_suplementario_no_pisa_la_carpeta_final():
+    _, _, d = ct.configuracion(_args(suplementario=True, G=200, n_semillas=10))
+    assert d != "resultados/final" and "G200" in d
+
+
+def test_suplementario_rechaza_usos_incorrectos():
+    for mal in (_args(suplementario=True, G=100),          # misma G que la final
+                _args(suplementario=True, n_semillas=0),
+                _args(suplementario=True, n_semillas=101),
+                _args(G=300),                              # --G sin --suplementario
+                _args(n_semillas=10),
+                _args(suplementario=True, smoke=True)):
+        with pytest.raises(SystemExit):
+            ct.configuracion(mal)
+
+
+def test_modo_final_sigue_igual():
+    cfg, semillas, d = ct.configuracion(_args())
+    assert cfg == ct.CFG_CONGELADA and semillas == config.SEMILLAS_FINALES and d == "resultados/final"
+
+
+def test_suplementario_no_se_mezcla_con_final(tmp_path, aleatoria_falsa):
+    d = str(tmp_path / "r")
+    ct.correr_todo(d, CFG_MINI, [1000], variantes=("estatica",), workers=1)
+    with pytest.raises(SystemExit):     # misma carpeta, otra G
+        ct.correr_todo(d, dict(CFG_MINI, G=9), [1000], variantes=("estatica",), workers=1)

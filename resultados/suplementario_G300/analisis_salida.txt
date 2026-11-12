@@ -1,0 +1,45 @@
+
+== descriptiva
+       variante       metrica    media      sd   mediana     mejor
+0     estatica      nl_mejor  99.1000  1.0077  100.0000  100.0000
+1     estatica   delta_mejor   9.2000  0.9923   10.0000    8.0000
+2     estatica     fit_mejor  88.7000  1.8425   88.0000   92.0000
+3     estatica  sesgo_lineal   0.1129  0.0039    0.1094    0.1094
+4     estatica      prob_dif   0.0359  0.0039    0.0391    0.0312
+5   adaptativa      nl_mejor  98.6500  0.9487   98.0000  100.0000
+6   adaptativa   delta_mejor   8.9500  1.0115    8.0000    8.0000
+7   adaptativa     fit_mejor  88.7500  2.1573   90.0000   92.0000
+8   adaptativa  sesgo_lineal   0.1146  0.0037    0.1172    0.1094
+9   adaptativa      prob_dif   0.0350  0.0040    0.0312    0.0312
+10   aleatoria      nl_mejor  97.8000  0.6076   98.0000   98.0000
+11   aleatoria   delta_mejor   9.8000  0.6076   10.0000    8.0000
+12   aleatoria     fit_mejor  86.2000  0.6076   86.0000   88.0000
+13   aleatoria  sesgo_lineal   0.1180  0.0024    0.1172    0.1172
+14   aleatoria      prob_dif   0.0383  0.0024    0.0391    0.0312
+
+== principal
+             sentido  media_a  media_b   dif  ic_inf  ic_sup    p_mw  p_wilcoxon   cliff  p_holm
+nl_mejor      mayor    98.65     99.1 -0.45   -0.85   -0.05  0.9784      0.9855 -0.2250  0.9784
+delta_mejor   menor     8.95      9.2 -0.25   -0.60    0.10  0.1338      0.0984  0.1250  0.4014
+fit_mejor     mayor    88.75     88.7  0.05   -0.70    0.80  0.4304      0.4010  0.0225  0.8608
+
+== secundarias
+                  sentido  media_a  media_b     dif  ic_inf  ic_sup    p_mw  p_wilcoxon   cliff  p_holm
+auc_fit            mayor  87.6741  87.7076 -0.0336 -0.5015  0.4576  0.6814      0.7009 -0.0606     1.0
+nl_prom_final      mayor  94.7110  97.9110 -3.2000 -3.6715 -2.7340  1.0000      1.0000 -0.9194     1.0
+delta_prom_final   menor  10.4870   9.6150  0.8720  0.5545  1.1835  1.0000      1.0000 -0.7044     1.0
+
+== vs_aleatoria (fitness)
+                      sentido  media_a  media_b   dif  ic_inf  ic_sup  p_mw  p_wilcoxon   cliff  p_holm
+adaptativa fit_mejor   mayor    88.75     86.2  2.55    1.80    3.25   0.0         0.0  0.6525     0.0
+estatica   fit_mejor   mayor    88.70     86.2  2.50    1.95    3.05   0.0         0.0  0.7650     0.0
+
+== mecanismo (mejora de fitness en las 10 generaciones tras entrar a explorar)
+   eventos: 604
+   ganancia_adaptativa: 0.020
+   ganancia_estatica: 0.066
+   frac_adaptativa_mayor: 0.008
+   frac_estatica_mayor: 0.031
+
+AES como cota: NL=112, delta=4
+Tablas y gráficas en resultados/suplementario_G300/analisis

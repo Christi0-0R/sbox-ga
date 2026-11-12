@@ -451,6 +451,96 @@ La exploración parece costar mejora a corto plazo y recuperarse gradualmente, s
 
 ---
 
+### Experimento suplementario (exploratorio): horizonte largo
+
+Declarado antes de ejecutarse (12 de noviembre, 2026).
+- Pregunta: ¿el costo de explorar de la adaptativa se amortiza con más generaciones?
+- Diseño: G = 300 (el resto, igual que las corridas finales: N = 100, parámetros congelados, λ = 2), semillas 1000 a 1039 (n = 40), las tres variantes con las mismas semillas.
+- Es exploratorio: no reemplaza la prueba de H1 (G = 100, n = 100), que ya se reportó. Se reporta cualquiera sea el resultado. No se recalibran parámetros.
+- Motivo: en las corridas finales la adaptativa no superó a la estática; el mecanismo sugiere que explorar cuesta a corto plazo.
+
+---
+
+### Fase 5: corridas finales y análisis (prueba de H1)
+
+**Fecha:** 12 de noviembre, 2026
+
+**Rama / PR:** fase-5-corridas-finales / [PENDIENTE: PR]
+
+**Responsables:** Christian Regina Rodríguez Magaña
+
+**Revisión:** SIN REVISION
+
+**Versión del código:** etiqueta `congelado-v1` (commit [PENDIENTE: hash de meta.json])
+
+**Qué se implementó**
+- `experimentos/correr_todo.py`: corre estática, adaptativa y aleatoria con las semillas 1000 a 1099 (300 corridas). Reanudable, con escritura atómica de cada CSV, guarda la mejor S-box de cada corrida del AG (`sboxes/*.json`), `meta.json` (configuración, commit, fecha) y `entorno.txt`. Se niega a correr si `config.py` no coincide con la configuración congelada o si el directorio contiene corridas de otra configuración.
+- `src/cifrado.py`: sustitución byte a byte con una S-box, con su inversa y variantes para archivos. Es un esquema de demostración, no seguro (sustitución monoalfabética). Pruebas de ida y vuelta con SHA-256 sobre texto, binarios aleatorios y datos vacíos.
+- `experimentos/contraste_final.py`: recalcula NL, δ y fitness de las S-boxes finales con el evaluador, con `verificacion.py` y con sboxU, y los compara con lo guardado en cada corrida.
+- Pruebas de `correr_todo`, `cifrado` y `contraste_final`, con pruebas de mutación manuales (corridas no repetidas, configuraciones no mezcladas, la adaptativa corre como adaptativa, cada implementación del contraste cuenta). Suite: [PENDIENTE: total de tu pytest].
+
+**Resultados (n = [PENDIENTE: confirmar 100] por variante; mismas semillas en las tres; media y desviación estándar)**
+
+| Variante | NL | δ | Fitness | Sesgo lineal | Prob. diferencial |
+|---|---|---|---|---|---|
+| Estática | 98.58 (0.96) | 9.44 (0.90) | 87.70 (1.69) | 0.1149 | 0.0369 |
+| Adaptativa | 98.16 (0.73) | 9.34 (0.95) | 87.48 (1.83) | 0.1166 | 0.0365 |
+| Aleatoria | 97.82 (0.64) | 9.84 (0.55) | 86.14 (0.51) | 0.1179 | 0.0384 |
+| AES (cota) | 112 | 4 | 112 | 0.0625 | 0.0156 |
+
+**Prueba de H1: adaptativa contra estática** (diferencia adaptativa − estática, IC 95 % por bootstrap pareado, Mann-Whitney unilateral con corrección de Holm)
+
+| Métrica | Sentido | Diferencia | IC 95 % | p (Holm) | Cliff |
+|---|---|---|---|---|---|
+| NL | mayor | −0.42 | [−0.64, −0.20] | 1.000 | −0.20 |
+| δ | menor | −0.10 | [−0.30, 0.08] | 0.667 | 0.05 |
+| Fitness | mayor | −0.22 | [−0.56, 0.12] | 1.000 | −0.09 |
+
+La sensibilidad con Wilcoxon pareado da las mismas conclusiones (p = 0.9998, 0.159, 0.850 sin corregir).
+
+**Conclusión sobre H1:** no se encuentra evidencia de que la variante adaptativa supere a la estática en NL, δ ni fitness. Se mantiene la hipótesis nula. La cota superior del IC del fitness (+0.12, aproximadamente 0.07 desviaciones estándar) descarta una mejora relevante de la adaptativa con este diseño. En NL la adaptativa es algo menor, y el IC excluye el cero; por ser pruebas unilaterales se reporta como descriptivo.
+
+**Comparación con la búsqueda aleatoria (referente de sanidad, atributo 7 del estándar)**
+- Estática: +1.56 de fitness [1.22, 1.90], Cliff 0.52, p < 0.001 (Holm).
+- Adaptativa: +1.34 [0.96, 1.72], Cliff 0.38, p < 0.001 (Holm).
+- Ambas superan a la aleatoria con el mismo presupuesto de evaluaciones. Ninguna se acerca a AES: el mejor NL obtenido fue 100 (AES 112) y el mejor δ, 8 (AES 4). El sesgo del mejor ataque lineal es ≈ 1.8 veces el de AES y la probabilidad del mejor ataque diferencial ≈ 2.4 veces.
+
+**Medidas secundarias (descriptivas)**
+- AUC del fitness a lo largo de las generaciones: diferencia −0.09 [−0.24, 0.07].
+- NL medio de la población final: adaptativa 94.84 contra estática 97.46 (−2.62 [−2.91, −2.33]). δ medio final: 10.54 contra 9.82. La adaptativa conserva una población más diversa y menos convergida; esto no se traduce en mejores mejores individuos.
+
+**Mecanismo (descriptivo)**: en 387 eventos de entrada a modo explorar, el fitness mejora en promedio 0.057 en las 10 generaciones siguientes en la adaptativa contra 0.098 que mejora la estática en esas mismas generaciones. Explorar tiene un costo a corto plazo que no se recupera dentro de ese horizonte. Los eventos de una misma corrida no son independientes, por lo que no se reportan pruebas.
+
+**Verificaciones**
+- Contraste de las S-boxes finales (`contraste_final.py`): [PENDIENTE: salida, esperado `200/200 S-boxes coinciden (con sboxU)` en Colab]. 
+- Reproducibilidad entre máquinas: [PENDIENTE: comparación de md5 de estatica_1000.csv, adaptativa_1000.csv y aleatoria_1000.csv entre la laptop y Colab, si se hace].
+
+**Supuestos y limitaciones**
+- Los parámetros de ambas variantes se calibraron con 27 configuraciones × 20 semillas preliminares y se congelaron antes de estas corridas. El óptimo de ambas rejillas quedó en el borde.
+- El atacante es simulado mediante NL y δ (Lectura A); no se implementa un ataque criptoanalítico.
+- El fitness toma pocos valores distintos, con muchos empates.
+- Con n = 100 el diseño detecta efectos de d ≈ 0.36 (unilateral) con 80 % de potencia.
+
+### Experimento suplementario (exploratorio): horizonte largo, G = 300
+
+**Declarado antes de ejecutarse** (ver sección anterior). Diseño: G = 300, resto de la configuración congelada, semillas 1000 a 1039 (n = 40), las tres variantes. No reemplaza la prueba de H1 ni se recalibró nada.
+
+**Verificación de coherencia:** en las 40 semillas y las tres variantes, las primeras 100 generaciones de las corridas de G = 300 son idénticas a las de las corridas finales. Los promedios de G = 100 en estas 40 semillas (87.70, 87.50, 86.15) coinciden con los de las 100 semillas, por lo que la submuestra es representativa.
+
+**Resultados (fitness final, media)**
+
+| Variante | G = 100 (mismas 40 semillas) | G = 300 |
+|---|---|---|
+| Estática | 87.70 | 88.70 |
+| Adaptativa | 87.50 | 88.75 |
+| Aleatoria | 86.15 | 86.20 |
+
+Adaptativa − estática en G = 300: fitness +0.05 [−0.70, 0.80]; δ −0.25 [−0.60, 0.10] (p = 0.13 sin corregir, 0.40 con Holm); NL −0.45 [−0.85, −0.05]. Ambas superan a la aleatoria por ≈ 2.5 puntos (p < 0.001). Mecanismo: 604 eventos, mejora posterior de 0.020 (adaptativa) contra 0.066 (estática). NL medio de la población final: 94.71 contra 97.91.
+
+**Lectura:** con más generaciones la diferencia de fitness entre variantes pasa de −0.22 a +0.05, en la dirección de la hipótesis de que el costo de explorar se amortiza con un horizonte mayor, pero
+
+---
+
 ## 9. Referencias principales
 
 - Hevner, A. R., March, S. T., Park, J., y Ram, S. (2004). Design science in information systems research. MIS Quarterly, 28(1), 75-105.

@@ -1,0 +1,32 @@
+{
+  "cfg": {
+    "G": 300,
+    "N": 100,
+    "cxpb": 0.9,
+    "div_min": 0.05,
+    "div_rec": 0.6,
+    "factor": 2.0,
+    "indpb": 0.02,
+    "indpb_max": 0.1,
+    "k": 5,
+    "k_explorar": 3,
+    "lam": 2.0,
+    "mutpb": 0.4,
+    "mutpb_max": 0.8,
+    "ventana": 20
+  },
+  "commit": "6334e2f1f81417518bc8f1773e993e24a7bcff9e",
+  "inicio": "2026-11-12T13:00:31",
+  "python": "3.14.7",
+  "semillas": [
+    1000,
+    1039,
+    40
+  ],
+  "ultima_ejecucion": "2026-11-12T13:00:31",
+  "variantes": [
+    "estatica",
+    "adaptativa",
+    "aleatoria"
+  ]
+}
