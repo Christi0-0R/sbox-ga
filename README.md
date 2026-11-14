@@ -541,7 +541,7 @@ La sensibilidad con Wilcoxon pareado da las mismas conclusiones (p = 0.9998, 0.1
 **Verificaciones**
 - Contraste de las S-boxes finales (`contraste_final.py`, Colab, entorno de Sage con sboxU 2.0): 200/200 S-boxes coinciden en NL, δ y fitness entre `evaluador.py`, `verificacion.py` y sboxU. `contraste_sboxu.py`: 51/51. `tests/test_sboxu.py` pasa.
 - Reproducibilidad del análisis: al volver a ejecutar `analisis/estadistica.py` sobre los CSV del repositorio se obtienen las mismas tablas que en la laptop.
-- Reproducibilidad entre máquinas: [PENDIENTE: resultado de la celda 4 de `colab_verificacion_sboxu.ipynb`, p. ej. "15/15 archivos idénticos a resultados/final"].
+- Reproducibilidad entre máquinas: 3 semillas (1000 a 1002) × 3 variantes recalculadas en Colab con la configuración congelada (CSV de las tres variantes y S-boxes de estática y adaptativa): 15/15 archivos idénticos byte a byte a `resultados/final` (laptop, Python 3.14.7; Colab, entorno de Sage con Python 3.14.10, commit b27f11f). Evidencia en `evidencia/colab_2026-11-14/`. No se probó con otra versión mayor de Python.
 - `demo_cifrado.py`: con una S-box final (estática, semilla 1000; NL = 100, δ = 10) cifra y descifra un mensaje corto, con SHA-256 idéntico al original. Es solo un ejemplo ilustrativo; no sustituye el cifrado de archivos binarios de la Fase 5b.
 
 **Supuestos y limitaciones**
