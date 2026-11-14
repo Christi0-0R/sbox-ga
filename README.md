@@ -40,7 +40,7 @@ La única diferencia entre versiones es el lazo de control de parámetros. DEAP,
 Se usa una **simulación cuantitativa** (tipo iv del estándar ACM SIGSOFT): el artefacto se evalúa en un entorno computacional artificial frente a un artefacto competidor, la versión estática.
 
 - 100 ejecuciones independientes por variante, más 100 de búsqueda aleatoria como referencia de sanidad, con las mismas 100 semillas (1000 a 1099) para todas.
-- Mismos función de fitness, tamaño de población (N = 100) y número de generaciones (G = 100).
+- Misma función de fitness, tamaño de población (N = 100) y número de generaciones (G = 100).
 - Prueba principal: Mann-Whitney unilateral sobre NL (mayor), δ (menor) y fitness final (mayor), con corrección de Holm sobre las tres pruebas.
 - Sensibilidad: Wilcoxon pareado por semilla. Efecto: diferencia de medias con IC 95 % (bootstrap pareado) y delta de Cliff.
 - Referencias: búsqueda aleatoria con el mismo presupuesto (atributo 7 del estándar ACM) y la S-box de AES (NL = 112, δ = 4) como cota.
@@ -81,36 +81,42 @@ No es un experimento controlado en el sentido del estándar (tipo iii), que requ
 sbox-ga/
 ├── README.md
 ├── requirements.txt
+├── demo_cifrado.py               # Ejemplo con un mensaje corto: cifra y descifra con una S-box final
 │
 ├── src/
 │   ├── gf256.py                  # Módulo 1: álgebra de GF(2^8) y S-box AES
 │   ├── evaluador.py              # Módulo 2: DDT, LAT/Walsh, NL, delta,
 │   │                             #         sesgo_lineal, prob_diferencial y fitness
 │   ├── motor_ga.py               # Módulo 3: AG estático y adaptativo
-│   ├── verificacion.py           # Módulo 4: regresión y contraste
-│   └── cifrado.py                # Módulo 5: cifrado de archivos binarios
+│   ├── verificacion.py           # Módulo 4: segunda implementación (FWHT, conteo directo)
+│   └── cifrado.py                # Módulo 5: sustitución byte a byte con una S-box (funciones listas y probadas; falta aplicarlo a archivos con las S-boxes finales)
 │
 ├── tests/                        # Pruebas automáticas (pytest)
 │
 ├── experimentos/
-│   ├── config.py                 # Parámetros compartidos por ambas variantes
-│   ├── correr_todo.py            # Ejecución de las 60 corridas
+│   ├── config.py                 # Parámetros congelados, comunes a ambas variantes
+│   ├── correr_todo.py            # Corridas finales (3 variantes x 100 semillas) y modo --suplementario
 │   ├── baseline_aleatoria.py     # Búsqueda aleatoria con el mismo presupuesto
 │   ├── calibracion_NG.py         # Fase 3: (N, G) vs. búsqueda aleatoria
 │   ├── calibracion_estatica.py   # Fase 3: rejilla de la estática (27 configuraciones)
-│   └── calibracion_adaptativa.py # Fase 4: rejilla de la adaptativa (27 configuraciones)
+│   ├── calibracion_adaptativa.py # Fase 4: rejilla de la adaptativa (27 configuraciones)
+│   ├── contraste_sboxu.py        # Contraste de 51 S-boxes (AES + 50 aleatorias) con sboxU
+│   └── contraste_final.py        # Contraste de las S-boxes finales de cada corrida
 │
 ├── resultados/
 │   ├── archivo_v1/               # Corridas del motor anterior (historial)
-│   ├── calib_NG/                 # Resultados de calibración de N y G
-│   ├── calib_estatica/           # Resultados de calibración estática
-│   └── calib_adaptativa/         # Resultados de calibración adaptativa
+│   ├── calib_NG/                 # Calibración de N y G
+│   ├── calib_estatica/           # Calibración de la estática
+│   ├── calib_adaptativa/         # Calibración de la adaptativa
+│   ├── final/                    # 300 corridas finales, S-boxes (sboxes/), meta.json y análisis
+│   └── suplementario_G300/       # Experimento exploratorio (G = 300, n = 40)
 │
 ├── analisis/
-│   └── estadistica.py            # Módulo 6: Mann-Whitney, tablas y gráficas
+│   └── estadistica.py            # Módulo 6: pruebas, tablas y gráficas
 │
 └── notebooks/
-    └── colab_main.ipynb          # Clona el repositorio y ejecuta en Google Colab
+    ├── colab_main.ipynb          # Clona el repositorio y ejecuta en Google Colab
+    └── colab_verificacion_sboxu.ipynb  # Instala Sage y sboxU y verifica los resultados finales
 ```
 
 ## 6. Entorno
@@ -137,7 +143,7 @@ python -m pytest -q
 
 ### Uso en Google Colab
 
-El notebook `notebooks/colab_main.ipynb` monta Google Drive, clona este repositorio, instala las dependencias y ejecuta los scripts. Los CSV se escriben a Drive para poder reanudar si la sesión se desconecta.
+Hay dos notebooks. `notebooks/colab_main.ipynb` monta Google Drive, clona el repositorio, instala las dependencias y ejecuta los scripts; los CSV se escriben a Drive para poder reanudar si la sesión se desconecta. `notebooks/colab_verificacion_sboxu.ipynb` instala Sage y sboxU en un entorno aparte (micromamba, con su propio Python), corre las pruebas y el contraste de las S-boxes finales con sboxU, recalcula tres semillas para comparar byte a byte con los resultados de la laptop y guarda la evidencia en Drive.
 
 ### Ejecución de scripts
 
@@ -171,18 +177,36 @@ Nota: la forma "python -m tests.medir_velocidad" no es la recomendada, porque re
 python -m pytest -q
 ```
 
+### Reproducir los resultados
+
+Desde la raíz del repositorio y con el entorno instalado:
+
+```
+python -m experimentos.correr_todo                    # 300 corridas finales (reanudable)
+python -m experimentos.correr_todo --suplementario    # experimento exploratorio: G = 300, 40 semillas
+python -m analisis.estadistica resultados/final       # tablas y gráficas del análisis
+python -m experimentos.contraste_final resultados/final   # recalcula NL y delta de las S-boxes finales
+PYTHONPATH=. python demo_cifrado.py                   # ejemplo con un mensaje corto (no es el cifrado de archivos)
+```
+
+`correr_todo.py` es reanudable: si se interrumpe, se vuelve a lanzar el mismo comando y retoma donde iba. Se niega a correr si `config.py` no coincide con la configuración congelada o si el directorio contiene corridas de otra configuración. Con `--smoke` hace una prueba rápida (3 semillas, N = 20, G = 10) que no es resultado. Cada ejecución guarda `meta.json` (configuración, commit, fecha) y `entorno.txt` (`pip freeze`).
+
 ## 7. Verificación cruzada (Módulo 4)
 
-El protocolo contempla sboxU como contraste independiente de NL y δ. La versión 2.0 (instalada desde GitHub) requiere SageMath, por lo que no está incluida en requirements.txt y su uso sigue pendiente de definir con el asesor.
+El protocolo contempla sboxU como contraste independiente de NL y δ. Se verificó con sboxU 2.0, que solo funciona con SageMath: se instala en Google Colab en un entorno aparte (micromamba, Sage de conda-forge) siguiendo `notebooks/colab_verificacion_sboxu.ipynb`. Por eso no está en requirements.txt, y `tests/test_sboxu.py` se salta cuando no hay Sage (`importorskip`).
 
-Mientras tanto, src/verificacion.py contiene una segunda implementación escrita con algoritmos distintos a los del evaluador:
+Se contrastan tres implementaciones:
 
-| Métrica | Evaluador (src/evaluador.py) | Contraste (src/verificacion.py) |
-|---|---|---|
-| δ | DDT vectorizada con NumPy | Conteo directo de pares en Python puro |
-| NL | Espectro de Walsh por multiplicación matricial | Transformada rápida de Walsh-Hadamard por función componente |
+| Métrica | Evaluador (src/evaluador.py) | Contraste interno (src/verificacion.py) | sboxU |
+|---|---|---|---|
+| δ | DDT vectorizada con NumPy | Conteo directo de pares en Python puro | `differential_uniformity` |
+| NL | Espectro de Walsh por multiplicación matricial | Transformada rápida de Walsh-Hadamard por función componente | `128 − linearity / 2` |
 
-Limitación: ambas implementaciones las escribió el mismo equipo, por lo que es menos independiente que una herramienta externa. Por eso sboxU sigue siendo deseable si se logra instalar.
+Resultados:
+- `experimentos/contraste_sboxu.py`: AES y 50 permutaciones aleatorias (semilla 0): 51/51 coinciden.
+- `experimentos/contraste_final.py`: las 200 S-boxes finales del AG (estática y adaptativa) coinciden en NL, δ y fitness con lo guardado en cada corrida: 200/200 con sboxU. Se detiene con error si corre sin sboxU, para no dar por bueno un contraste parcial.
+
+Limitación: el evaluador y `verificacion.py` los escribió el mismo equipo, por lo que sboxU aporta la verificación realmente independiente.
 
 ---
 
@@ -194,7 +218,8 @@ Limitación: ambas implementaciones las escribió el mismo equipo, por lo que es
 - [x] Fase 2b: correcciones del motor y de las pruebas
 - [x] Fase 3: calibración de N, G y de la estática (compuerta contra búsqueda aleatoria)
 - [x] Fase 4: adaptativa rediseñada, modelo de atacante, calibración y Módulo 6
-- [ ] Fase 5: corridas finales, cifrado de archivos y contraste de S-boxes
+- [x] Fase 5a: corridas finales, contraste con sboxU y experimento suplementario
+- [ ] Fase 5b: cifrado de archivos binarios con las S-boxes generadas
 - [ ] Fase 6: análisis de resultados y documento final
 
 ## 8.1 Bitácora de fases
@@ -203,7 +228,7 @@ Limitación: ambas implementaciones las escribió el mismo equipo, por lo que es
 
 **Fecha:** 31 de octubre, 2026
 
-**Rama / PR:** fase-1-gf256-evaluador / Sin PR (pendiente de merge)
+**Rama** fase-1-gf256-evaluador
 
 **Responsables:** Christian Regina Rodríguez Magaña
 
@@ -241,7 +266,7 @@ Comando usado: %env PYTHONPATH=. y !python tests/medir_velocidad.py
 **Hito:** regresión con AES aprobada, por lo que se puede avanzar a la Fase 2.
 
 **Pendientes heredados**
-- Definir con el asesor cómo se hará el contraste con sboxU (requiere Sage).
+- Definir con el asesor cómo se hará el contraste con sboxU (requiere Sage). Resuelto en la Fase 5a.
 - Agregar como referencia valores de NL y δ reportados en la literatura (Picek et al., 2016; Clark et al., 2004), extraídos directamente de los artículos.
 
 ---
@@ -250,7 +275,7 @@ Comando usado: %env PYTHONPATH=. y !python tests/medir_velocidad.py
 
 **Fecha:** 5 de noviembre, 2026
 
-**Rama / PR:** fase-2-motor / Sin PR (pendiente de merge)
+**Rama:** fase-2-motor
 
 **Responsables:** Christian Regina Rodríguez Magaña
 
@@ -267,7 +292,7 @@ Comando usado: %env PYTHONPATH=. y !python tests/medir_velocidad.py
 **Pruebas** (python -m pytest -q)
 - 15 pruebas pasan (10 de la fase 1 y 5 del motor).
 - Corrida válida (el mejor es permutación), reproducibilidad (misma semilla, mismo CSV), la adaptativa corre, ambas variantes parten de la misma población inicial, y PMX y mutación preservan la permutación en 300 repeticiones.
-- [PENDIENTE: prueba en Colab]
+- Probado en Google Colab (Fases 5).
 
 **Tiempos**
 - Corrida de 50 generaciones con N = 30: 1.8 a 2.1 s (la primera, 7.3 s por arranque en frío). Estimación de las 60 corridas finales: unos 2 minutos.
@@ -287,21 +312,21 @@ Comando usado: %env PYTHONPATH=. y !python tests/medir_velocidad.py
 **Supuestos y decisiones**
 - Las semillas 1 a 5 se usan solo para calibrar; no son evidencia de H1.
 - No se eligió configuración por diferencias de 0.4 puntos de fitness (ruido); el criterio es funcional (que mutpb suba y baje).
-- [PENDIENTE: valores congelados de CFG y LAMBDA, con su justificación]
-- [PENDIENTE: esfuerzo de calibración equivalente para la estática]
+- [PENDIENTE: valores congelados de CFG y LAMBDA, con su justificación]: Resuelto en las Fases 3 y 4.
+- [PENDIENTE: esfuerzo de calibración equivalente para la estática]: Resuelto en la Fase 3: 27 configuraciones × 20 semillas para cada variante
 
 **Evaluación conceptual del mecanismo adaptativo (atributo 3)**
 - Fortaleza: reacciona a la pérdida de diversidad sin intervención manual; la diferencia entre variantes queda aislada en un solo mecanismo.
 - Debilidad: depende de umbrales (ventana, div_min) que se calibran con pocas semillas.
 - Límite: δ es un máximo y da poca señal de gradiente, por lo que la retroalimentación puede no tener efecto sobre esa métrica.
-- [PENDIENTE: costo de medir diversidad y sensibilidad a los umbrales, una vez rediseñado el lazo]
+- [PENDIENTE: costo de medir diversidad y sensibilidad a los umbrales, una vez rediseñado el lazo]: Resuelto en la Fase 4: la diversidad se mide con 100 pares muestreados; sensibilidad a los umbrales vista en la rejilla de 27 configuraciones
 
 **Pendientes con el asesor**
 - Forma de la señal de δ en el fitness (contar celdas en el máximo, además del máximo).
-- Tamaño de muestra: con corridas de unos 2 s, la restricción de cómputo que justificaba n = 30 en el protocolo deja de aplicar; la justificación sería la potencia estadística.
+- Tamaño de muestra: con corridas de unos 2 s, la restricción de cómputo que justificaba n = 30 en el protocolo deja de aplicar; la justificación sería la potencia estadística. Resuelto: n = 100.
 - Contraste con sboxU (requiere Sage) y comparación con el estado del arte (heredados de la fase 1).
 
-**Hito:** [PENDIENTE: parámetros congelados]
+**Hito:** parámetros congelados en la Fase 4 (ver ahí).
 
 ### Fase 2b: correcciones del motor y de las pruebas
 
@@ -316,13 +341,13 @@ Comando usado: %env PYTHONPATH=. y !python tests/medir_velocidad.py
 - Saltos de línea LF (`.gitattributes`, `lineterminator="\n"`), versiones mínimas en requirements.txt, resultados viejos en resultados/archivo_v1.
 
 **Pruebas** (python -m pytest -q)
-- 34 pruebas pasan y 1 se salta (el contraste con sboxU, que usa `importorskip`). [PENDIENTE: confirmar con tu salida]
+- 34 pruebas pasan y 1 se salta (el contraste con sboxU, que usa `importorskip`).
 - Nuevas: esquema del CSV, elitismo real (fit_max_pob de la población frente a fit_mejor del Hall of Fame), consistencia de NL, δ y fitness, propiedad de que toda descendencia tiene métricas vigentes, reproducibilidad de la adaptativa, misma población inicial (ahora no vacuo) y población inicial distinta con semillas distintas.
 - Regresión dorada: con las mismas semillas, el motor refactorizado produjo CSV idénticos, al número, a los 8 casos viejos (5 estáticas y 2 adaptativas, más una de control).
 - Pruebas de mutación manuales: se rompió el código a propósito (sin elitismo, sin invalidar el fitness tras mutar o cruzar, la adaptativa modificando cxpb) y los tests fallan. Dos tests de la primera versión no detectaban nada y se rehicieron.
 
 **Supuestos y decisiones**
-- sboxU se pospone. La versión 2.x compila con pip pero falla al importar sin SageMath; el paquete `sboxu` de PyPI (1.1.0) es un cascarón vacío, por lo que no va en requirements.txt. El riesgo R1 del protocolo cubre este caso. [PENDIENTE: definir con el asesor, o intentar Sage en Colab]
+- sboxU se pospone. La versión 2.x compila con pip pero falla al importar sin SageMath; el paquete `sboxu` de PyPI (1.1.0) es un cascarón vacío, por lo que no va en requirements.txt. El riesgo R1 del protocolo cubre este caso. Resuelto en las Fases 4 y 5: se instaló en Colab con Sage y se verificó (sección 7).
 
 **Hito:** motor estable y verificado, listo para calibrar.
 
@@ -332,7 +357,7 @@ Comando usado: %env PYTHONPATH=. y !python tests/medir_velocidad.py
 
 **Fecha:** 8 de noviembre, 2026
 
-**Rama / PR:** fase-3-calibracion / [PENDIENTE: PR]
+**Rama:** fase-3-calibracion
 
 **Responsables:** Christian Regina Rodríguez Magaña
 
@@ -346,7 +371,7 @@ Comando usado: %env PYTHONPATH=. y !python tests/medir_velocidad.py
 - experimentos/calibracion_estatica.py: rejilla mutpb ∈ {0.1, 0.2, 0.4} × indpb ∈ {0.01, 0.02, 0.05} × k ∈ {2, 3, 5}, 20 semillas, reanudable, con escritura atómica del CSV.
 - Criterios escritos antes de ver resultados. Para N y G: (a) la estática supera a la aleatoria (Mann-Whitney unilateral, p < 0.05) y (b) la búsqueda se estanca (≥ 50 % de las corridas no mejoran en el último 20 % de las generaciones); se elige la más barata. Para la estática: mayor fitness medio final; en empate (menos de 0.3), la más cercana a la configuración base.
 
-**Pruebas:** se agregan 5 de la búsqueda aleatoria y 4 de la rejilla de la estática. [PENDIENTE: total de tu pytest]
+**Pruebas:** se agregan 5 de la búsqueda aleatoria y 4 de la rejilla de la estática.
 
 **Resultados: calibración de N y G (20 semillas, fitness final medio)**
 
@@ -366,7 +391,7 @@ Las tres cumplen (a) y (b). Elegida: **N = 100, G = 100** (la más barata). Con 
 **Tiempos (laptop, varios núcleos):** calibración de N y G (60 tareas) 9.8 min; rejilla de la estática (540 corridas) 15.7 min.
 
 **Supuestos y decisiones**
-- LAMBDA = 2.0 queda **fijo** y no se calibra: cambiarlo después de ver resultados invalidaría la comparación (R7). Decisión tomada por los autores sin consulta con el asesor. [PENDIENTE: confirmar con el asesor]
+- LAMBDA = 2.0 queda **fijo** y no se calibra.
 - Las semillas preliminares no son evidencia de H1.
 - Elegir el máximo de 27 medias sobreestima un poco el valor real; el fitness definitivo se mide con las semillas finales.
 - Limitación: el óptimo de la estática quedó en el borde de la rejilla (mutpb y k máximos). No se amplió para no dar más esfuerzo de calibración a una variante que a la otra.
@@ -399,7 +424,7 @@ Las tres cumplen (a) y (b). Elegida: **N = 100, G = 100** (la más barata). Con 
 - Sin histéresis, la adaptativa entraba a "explorar" y no salía nunca (los contadores solo se reinician cuando el mejor mejora, y en exploración casi nunca mejora). Terminaba con mutpb = 0.8 y k = 3 cerca del 80 % del tiempo, comportándose como búsqueda casi aleatoria (fitness 86). La versión final explora ~20 a 43 % del tiempo, con 12 a 14 cambios de modo por corrida.
 
 **Pruebas** (python -m pytest -q)
-- La suite completa pasa, con 1 prueba saltada (sboxU). [PENDIENTE: número exacto de tu pytest; en la copia de verificación fueron 67 y 1 salto, sin contar las 5 de la búsqueda aleatoria]
+- La suite completa pasa, con 1 prueba saltada (sboxU). Total al cierre del proyecto: 103 (ver Fase 5).
 - Prueba clave: con factor = 1.0 y k_explorar = k, la adaptativa produce un CSV idéntico al de la estática (salvo la columna `variante`), lo que demuestra que la única diferencia entre variantes es el control de parámetros. Una prueba complementaria verifica que con control activo sí se distinguen.
 - La estática no cambió: con el motor nuevo produce CSV idéntico, al número, al del motor anterior.
 - Pruebas de mutación manuales (la regla y los contadores) y del análisis estadístico: se rompió el código a propósito (sin histéresis, AND por OR, sin bajar k, sin respetar topes, contadores de NL y de δ al revés, sin reiniciar contadores, sentido de la prueba invertido, Holm mal aplicado, bootstrap no pareado, ventana del mecanismo) y los tests fallan. Dos mutaciones sobrevivían a la primera versión de los tests, se agregaron pruebas y ya se detectan.
@@ -433,18 +458,19 @@ La exploración parece costar mejora a corto plazo y recuperarse gradualmente, s
 - Lectura del protocolo: "adaptarse a ataques" significa usar el resultado de los ataques lineal y diferencial simulados (NL y δ) como señal del lazo. No se implementa un ataque real; el protocolo (1.1.4) excluye diseñar un cifrado completo. [PENDIENTE: confirmar con el asesor]
 - Los parámetros del lazo (k_explorar, topes, div_rec) se fijaron antes de calibrar; ventana, div_min y factor, con la rejilla anterior.
 - No se ajusta más la regla tras ver estos resultados. Si la adaptativa no supera a la estática en las corridas finales, es un resultado válido (riesgo R4) y se discute con el mecanismo de arriba.
-- Experimento suplementario previsto, exploratorio y declarado antes de correrlo: un horizonte más largo (por ejemplo G = 300) sobre un subconjunto de semillas finales, para ver si el costo de explorar se amortiza. No sustituye la prueba de H1. [PENDIENTE: decidir si se hace]
+- Experimento suplementario: se ejecutó (ver Fase 5).
 
 **Pendientes**
-- Escribir en config.py ventana = 20, div_min = 0.05 y factor = 2.0, quitando "PROVISIONAL".
-- Etapa 5: correr_todo.py (estática, adaptativa y aleatoria, 100 semillas), cifrado.py y contraste de S-boxes.
+- Escribir en config.py ventana = 20, div_min = 0.05 y factor = 2.0, quitando "PROVISIONAL". Resuelto en la Fase 5: config.py congelado.ontraste con sboxU
+- Etapa 5: correr_todo.py (estática, adaptativa y aleatoria, 100 semillas), cifrado.py y contraste de S-boxes. Resuelto en la Fase 5a, salvo el cifrado de archivos (Fase 5b).
 - Actualizar el protocolo: N, G y n (4.4, 5.1.2, 5.2, 5.3, R2, 5.8), el modelo de atacante (1, 1.1.2, 1.1.4, 1.3.1, 2.3.3, 2.3.6, 4.5.3), el plan de análisis (4.6) y el riesgo R8 (el atacante es simulado).
 
-**Hito:** [PENDIENTE: parámetros congelados en config.py]
+**Hito:** parámetros congelados en config.py (N = 100, G = 100, mutpb = 0.4, indpb = 0.02, k = 5, λ = 2; ventana = 20, div_min = 0.05, factor = 2.0), etiqueta congelado-v1.
 
 ---
 
-**Contraste con sboxU (8 y 9 de noviembre, 2026)**
+### Fase 4b: contraste con sboxU (8 y 9 de noviembre, 2026).
+
 - sboxU 2.0 compilado en Colab con Sage de conda-forge (micromamba, entorno aparte; condacolab falló con HTTP 504 al bajar Miniforge). Se usó el Python del entorno (`python -m pip install --no-build-isolation`), porque el `sage` de conda-forge ya no acepta `-pip` ni `-python`.
 - `experimentos/contraste_sboxu.py`: AES + 50 permutaciones aleatorias (semilla 0). Resultado: 51/51 coinciden en (NL, δ) entre `evaluador.py`, `verificacion.py` (FWHT y conteo directo) y sboxU. `tests/test_sboxu.py` pasa (ya no se salta).
 - Cierra el riesgo R1. En requirements.txt sboxU sigue sin listarse: solo es instalable con Sage.
@@ -458,28 +484,29 @@ Declarado antes de ejecutarse (12 de noviembre, 2026).
 - Diseño: G = 300 (el resto, igual que las corridas finales: N = 100, parámetros congelados, λ = 2), semillas 1000 a 1039 (n = 40), las tres variantes con las mismas semillas.
 - Es exploratorio: no reemplaza la prueba de H1 (G = 100, n = 100), que ya se reportó. Se reporta cualquiera sea el resultado. No se recalibran parámetros.
 - Motivo: en las corridas finales la adaptativa no superó a la estática; el mecanismo sugiere que explorar cuesta a corto plazo.
+- Registro: el diseño se acordó y escribió antes de ejecutar (12 de noviembre de 2026); `meta.json` marca el inicio de la corrida a las 13:00:31 de ese día.
 
 ---
 
-### Fase 5: corridas finales y análisis (prueba de H1)
+### Fase 5a: corridas finales y análisis (prueba de H1)
 
 **Fecha:** 12 de noviembre, 2026
 
-**Rama / PR:** fase-5-corridas-finales / [PENDIENTE: PR]
+**Rama:** fase-5-corridas-finales
 
 **Responsables:** Christian Regina Rodríguez Magaña
 
 **Revisión:** SIN REVISION
 
-**Versión del código:** etiqueta `congelado-v1` (commit [PENDIENTE: hash de meta.json])
+**Versión del código:** etiqueta `congelado-v1` (commit 6334e2f, el que registra `meta.json` de las corridas finales)
 
 **Qué se implementó**
 - `experimentos/correr_todo.py`: corre estática, adaptativa y aleatoria con las semillas 1000 a 1099 (300 corridas). Reanudable, con escritura atómica de cada CSV, guarda la mejor S-box de cada corrida del AG (`sboxes/*.json`), `meta.json` (configuración, commit, fecha) y `entorno.txt`. Se niega a correr si `config.py` no coincide con la configuración congelada o si el directorio contiene corridas de otra configuración.
-- `src/cifrado.py`: sustitución byte a byte con una S-box, con su inversa y variantes para archivos. Es un esquema de demostración, no seguro (sustitución monoalfabética). Pruebas de ida y vuelta con SHA-256 sobre texto, binarios aleatorios y datos vacíos.
+- `src/cifrado.py`: sustitución byte a byte con una S-box, con su inversa y variantes para archivos. Pruebas de ida y vuelta con SHA-256 sobre texto, datos vacíos y un binario aleatorio de 3 MB. **Pendiente (Fase 5b):** aplicarlo a archivos binarios reales con las S-boxes generadas por el AG. Es un esquema de demostración, no un cifrado seguro.
 - `experimentos/contraste_final.py`: recalcula NL, δ y fitness de las S-boxes finales con el evaluador, con `verificacion.py` y con sboxU, y los compara con lo guardado en cada corrida.
-- Pruebas de `correr_todo`, `cifrado` y `contraste_final`, con pruebas de mutación manuales (corridas no repetidas, configuraciones no mezcladas, la adaptativa corre como adaptativa, cada implementación del contraste cuenta). Suite: [PENDIENTE: total de tu pytest].
+- Pruebas de `correr_todo`, `cifrado` y `contraste_final`, con pruebas de mutación manuales (corridas no repetidas, configuraciones no mezcladas, la adaptativa corre como adaptativa, cada implementación del contraste cuenta). Suite: 103 pruebas pasan y 1 se salta (sboxU) en el Python de Colab; con sboxU en el entorno de Sage, 104 pasan sin saltos.
 
-**Resultados (n = [PENDIENTE: confirmar 100] por variante; mismas semillas en las tres; media y desviación estándar)**
+**Resultados (n = 100 por variante, semillas 1000 a 1099 en las tres; media y desviación estándar)**
 
 | Variante | NL | δ | Fitness | Sesgo lineal | Prob. diferencial |
 |---|---|---|---|---|---|
@@ -512,14 +539,17 @@ La sensibilidad con Wilcoxon pareado da las mismas conclusiones (p = 0.9998, 0.1
 **Mecanismo (descriptivo)**: en 387 eventos de entrada a modo explorar, el fitness mejora en promedio 0.057 en las 10 generaciones siguientes en la adaptativa contra 0.098 que mejora la estática en esas mismas generaciones. Explorar tiene un costo a corto plazo que no se recupera dentro de ese horizonte. Los eventos de una misma corrida no son independientes, por lo que no se reportan pruebas.
 
 **Verificaciones**
-- Contraste de las S-boxes finales (`contraste_final.py`): [PENDIENTE: salida, esperado `200/200 S-boxes coinciden (con sboxU)` en Colab]. 
-- Reproducibilidad entre máquinas: [PENDIENTE: comparación de md5 de estatica_1000.csv, adaptativa_1000.csv y aleatoria_1000.csv entre la laptop y Colab, si se hace].
+- Contraste de las S-boxes finales (`contraste_final.py`, Colab, entorno de Sage con sboxU 2.0): 200/200 S-boxes coinciden en NL, δ y fitness entre `evaluador.py`, `verificacion.py` y sboxU. `contraste_sboxu.py`: 51/51. `tests/test_sboxu.py` pasa.
+- Reproducibilidad del análisis: al volver a ejecutar `analisis/estadistica.py` sobre los CSV del repositorio se obtienen las mismas tablas que en la laptop.
+- Reproducibilidad entre máquinas: [PENDIENTE: resultado de la celda 4 de `colab_verificacion_sboxu.ipynb`, p. ej. "15/15 archivos idénticos a resultados/final"].
+- `demo_cifrado.py`: con una S-box final (estática, semilla 1000; NL = 100, δ = 10) cifra y descifra un mensaje corto, con SHA-256 idéntico al original. Es solo un ejemplo ilustrativo; no sustituye el cifrado de archivos binarios de la Fase 5b.
 
 **Supuestos y limitaciones**
 - Los parámetros de ambas variantes se calibraron con 27 configuraciones × 20 semillas preliminares y se congelaron antes de estas corridas. El óptimo de ambas rejillas quedó en el borde.
 - El atacante es simulado mediante NL y δ (Lectura A); no se implementa un ataque criptoanalítico.
 - El fitness toma pocos valores distintos, con muchos empates.
 - Con n = 100 el diseño detecta efectos de d ≈ 0.36 (unilateral) con 80 % de potencia.
+- Trazabilidad: `meta.json` de las corridas finales registra el commit 6334e2f (etiqueta congelado-v1). El modo `--suplementario` de `correr_todo.py` y `contraste_final.py` se agregaron después de ese commit; el motor (`src/`) y `config.py` no cambiaron. El `meta.json` del experimento suplementario también dice 6334e2f porque se ejecutó con esos cambios aún sin confirmar; su configuración (G = 300) está en el propio archivo.
 
 ### Experimento suplementario (exploratorio): horizonte largo, G = 300
 
@@ -537,7 +567,14 @@ La sensibilidad con Wilcoxon pareado da las mismas conclusiones (p = 0.9998, 0.1
 
 Adaptativa − estática en G = 300: fitness +0.05 [−0.70, 0.80]; δ −0.25 [−0.60, 0.10] (p = 0.13 sin corregir, 0.40 con Holm); NL −0.45 [−0.85, −0.05]. Ambas superan a la aleatoria por ≈ 2.5 puntos (p < 0.001). Mecanismo: 604 eventos, mejora posterior de 0.020 (adaptativa) contra 0.066 (estática). NL medio de la población final: 94.71 contra 97.91.
 
-**Lectura:** con más generaciones la diferencia de fitness entre variantes pasa de −0.22 a +0.05, en la dirección de la hipótesis de que el costo de explorar se amortiza con un horizonte mayor, pero
+**Lectura:** con más generaciones la diferencia de fitness entre variantes pasa de −0.22 a +0.05, en la dirección de la hipótesis de que el costo de explorar se amortiza con un horizonte mayor, pero el intervalo, con n = 40, incluye tanto una pequeña ventaja como una pequeña desventaja. No hay evidencia para afirmar que la adaptativa supera a la estática a G = 300. En las mismas 40 semillas, pasar de G = 100 a G = 300 aporta +1.00 de fitness a la estática, +1.25 a la adaptativa y +0.05 a la aleatoria. Se presenta como pista para trabajo futuro (un horizonte más largo con más semillas, declarado de antemano), no como hallazgo. Con n = 40 los valores p son exploratorios.
+
+### Discusión (borrador)
+- La hipótesis H1 no se sostiene con el diseño final. El resultado es válido y está previsto en el protocolo (riesgo R4).
+- Explicaciones posibles, a tratar como hipótesis y no como hechos probados: (1) explorar tiene un costo inmediato (mecanismo) que a G = 100 no se amortiza; (2) δ casi no cambia en el mejor individuo, por lo que la señal de estancamiento de δ aporta poco al lazo; (3) el fitness toma pocos valores, con muchos empates; (4) la estática calibrada ya es un baseline fuerte; (5) calibrar ambas con 20 semillas pudo sobreestimar a ambas.
+- La contribución verificable: el AG supera a la búsqueda aleatoria; la diferencia entre variantes queda aislada en el lazo de control (prueba de identidad con control neutro); el experimento está acotado, es reproducible y se reporta completo.
+
+**Hito de la Fase 5a:** corridas finales completas (300) y verificadas con sboxU (200/200); H1 no se sostiene; experimento suplementario ejecutado. **Pendiente (Fase 5b):** cifrado de archivos binarios con las S-boxes generadas, con verificación de ida y vuelta (SHA-256).
 
 ---
 
