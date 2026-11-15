@@ -1,0 +1,4 @@
+sbox,semilla,nl,delta,fitness,sesgo_lineal,prob_diferencial
+estatica_1008,1008,100,8,92.0,0.1094,0.0312
+adaptativa_1036,1036,100,8,92.0,0.1094,0.0312
+aes,,112,4,112.0,0.0625,0.0156

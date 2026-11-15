@@ -1,0 +1,5 @@
+La criptografía es una herramienta esencial de la ciberseguridad para proteger información frente a accesos no autorizados, y se apoya en algoritmos como el Estándar de Cifrado Avanzado (AES), que operan con claves de 128 o 256 bits. Dentro de AES, las cajas de sustitución (S-boxes) son el único componente no lineal y determinan la resistencia de cifrado ante el criptoanálisis lineal y diferencial.
+
+La calidad de una S-box se evalúa mediante métricas formales como la no-linealidad (NL) y la uniformidad diferencial (δ). Dado el enorme espacio de funciones biyectivas sobre GF(2⁸), la búsqueda exhaustiva es inviable: 256! ≈ 8.58 × 10⁵⁰⁶ permutaciones.
+
+Prueba de caracteres: áéíóú ÁÉÍÓÚ ñ Ñ ü ¿? ¡! € « » — … 0123456789
