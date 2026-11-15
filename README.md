@@ -89,7 +89,7 @@ sbox-ga/
 │   │                             #         sesgo_lineal, prob_diferencial y fitness
 │   ├── motor_ga.py               # Módulo 3: AG estático y adaptativo
 │   ├── verificacion.py           # Módulo 4: segunda implementación (FWHT, conteo directo)
-│   └── cifrado.py                # Módulo 5: sustitución byte a byte con una S-box (funciones listas y probadas; falta aplicarlo a archivos con las S-boxes finales)
+│   └── cifrado.py                # Módulo 5: sustitución byte a byte con una S-box (demostrativo, no seguro)
 │
 ├── tests/                        # Pruebas automáticas (pytest)
 │
@@ -101,7 +101,11 @@ sbox-ga/
 │   ├── calibracion_estatica.py   # Fase 3: rejilla de la estática (27 configuraciones)
 │   ├── calibracion_adaptativa.py # Fase 4: rejilla de la adaptativa (27 configuraciones)
 │   ├── contraste_sboxu.py        # Contraste de 51 S-boxes (AES + 50 aleatorias) con sboxU
-│   └── contraste_final.py        # Contraste de las S-boxes finales de cada corrida
+│   ├── contraste_final.py        # Contraste de las S-boxes finales de cada corrida
+│   ├── generar_muestras.py       # Fase 5b: crea los archivos de ejemplo (texto, PNG, ELF mínimo, vacío)
+│   └── cifrar_archivos.py        # Fase 5b: cifra y descifra con la mejor estática, la mejor adaptativa y AES
+│
+├── ejemplos/                     # Fase 5b: archivos de prueba para el cifrado (4 archivos pequeños)
 │
 ├── resultados/
 │   ├── archivo_v1/               # Corridas del motor anterior (historial)
@@ -109,14 +113,21 @@ sbox-ga/
 │   ├── calib_estatica/           # Calibración de la estática
 │   ├── calib_adaptativa/         # Calibración de la adaptativa
 │   ├── final/                    # 300 corridas finales, S-boxes (sboxes/), meta.json y análisis
-│   └── suplementario_G300/       # Experimento exploratorio (G = 300, n = 40)
+│   ├── suplementario_G300/       # Experimento exploratorio (G = 300, n = 40)
+│   └── cifrado/                  # Fase 5b: cifrado_archivos.csv y comparacion_sboxes.csv
 │
 ├── analisis/
-│   └── estadistica.py            # Módulo 6: pruebas, tablas y gráficas
+│   ├── estadistica.py            # Módulo 6: pruebas, tablas y gráficas
+│   └── comprobaciones.py         # Comprobaciones de coherencia de los resultados
+│
+├── evidencia/                    # Salidas de las verificaciones hechas en Colab (sboxU, reproducibilidad)
+│
+├── 1_Documentacion/              # Documentación (pendiente de regenerar, Fase 6)
 │
 └── notebooks/
-    ├── colab_main.ipynb          # Clona el repositorio y ejecuta en Google Colab
-    └── colab_verificacion_sboxu.ipynb  # Instala Sage y sboxU y verifica los resultados finales
+    ├── colab_main.ipynb                 # Clona el repositorio y ejecuta en Google Colab
+    ├── colab_fase5_correr_todo.ipynb    # Corridas finales en Colab
+    └── colab_verificacion_sboxu.ipynb   # Instala Sage y sboxU y verifica los resultados finales
 ```
 
 ## 6. Entorno
@@ -143,7 +154,7 @@ python -m pytest -q
 
 ### Uso en Google Colab
 
-Hay dos notebooks. `notebooks/colab_main.ipynb` monta Google Drive, clona el repositorio, instala las dependencias y ejecuta los scripts; los CSV se escriben a Drive para poder reanudar si la sesión se desconecta. `notebooks/colab_verificacion_sboxu.ipynb` instala Sage y sboxU en un entorno aparte (micromamba, con su propio Python), corre las pruebas y el contraste de las S-boxes finales con sboxU, recalcula tres semillas para comparar byte a byte con los resultados de la laptop y guarda la evidencia en Drive.
+Hay notebooks en `notebooks/`. `colab_main.ipynb` monta Google Drive, clona el repositorio, instala las dependencias y ejecuta los scripts; los CSV se escriben a Drive para poder reanudar si la sesión se desconecta. `colab_fase5_correr_todo.ipynb` lanza las corridas finales. `colab_verificacion_sboxu.ipynb` instala Sage y sboxU en un entorno aparte (micromamba, con su propio Python), corre las pruebas y el contraste de las S-boxes finales con sboxU, recalcula tres semillas para comparar byte a byte con los resultados de la laptop y guarda la evidencia en Drive.
 
 ### Ejecución de scripts
 
@@ -186,7 +197,9 @@ python -m experimentos.correr_todo                    # 300 corridas finales (re
 python -m experimentos.correr_todo --suplementario    # experimento exploratorio: G = 300, 40 semillas
 python -m analisis.estadistica resultados/final       # tablas y gráficas del análisis
 python -m experimentos.contraste_final resultados/final   # recalcula NL y delta de las S-boxes finales
-PYTHONPATH=. python demo_cifrado.py                   # ejemplo con un mensaje corto (no es el cifrado de archivos)
+python -m experimentos.generar_muestras               # crea ejemplos/ (archivos de prueba)
+python -m experimentos.cifrar_archivos                # cifra y descifra archivos con las S-boxes finales (Fase 5b)
+PYTHONPATH=. python demo_cifrado.py                   # ejemplo con un mensaje corto (ilustrativo)
 ```
 
 `correr_todo.py` es reanudable: si se interrumpe, se vuelve a lanzar el mismo comando y retoma donde iba. Se niega a correr si `config.py` no coincide con la configuración congelada o si el directorio contiene corridas de otra configuración. Con `--smoke` hace una prueba rápida (3 semillas, N = 20, G = 10) que no es resultado. Cada ejecución guarda `meta.json` (configuración, commit, fecha) y `entorno.txt` (`pip freeze`).
@@ -219,8 +232,11 @@ Limitación: el evaluador y `verificacion.py` los escribió el mismo equipo, por
 - [x] Fase 3: calibración de N, G y de la estática (compuerta contra búsqueda aleatoria)
 - [x] Fase 4: adaptativa rediseñada, modelo de atacante, calibración y Módulo 6
 - [x] Fase 5a: corridas finales, contraste con sboxU y experimento suplementario
-- [ ] Fase 5b: cifrado de archivos binarios con las S-boxes generadas
+- [x] Fase 5b: cifrado de archivos binarios con las S-boxes generadas
 - [ ] Fase 6: análisis de resultados y documento final
+  - Regenerar `1_Documentacion/` (está desactualizada respecto al código).
+  - Confirmar con el asesor: λ fijo en 2 y cómo se reporta el resultado negativo de H1.
+  - Redactar el informe final (entrega: 6 de diciembre).
 
 ## 8.1 Bitácora de fases
 
@@ -260,7 +276,7 @@ Comando usado: %env PYTHONPATH=. y !python tests/medir_velocidad.py
 
 **Supuestos y decisiones**
 - inv(0) = 0, por convención de AES.
-- LAMBDA = 2.0 es provisional. Se calibra en las corridas preliminares y se congela antes de las 60 corridas finales (riesgo R7).
+- LAMBDA = 2.0 es provisional. Se calibra en las corridas preliminares y se congela antes de las corridas finales (riesgo R7). Nota: aquí se hablaba de 60 corridas finales (valor inicial); luego se amplió a 300 corridas (100 semillas × 3 variantes), ver Fase 5a.
 - La DDT 4x4 usa la S-box de PRESENT (Bogdanov et al., 2007). [PENDIENTE: contrastar los valores de analisis/ejemplo_4x4.py con la tabla del artículo.]
 
 **Hito:** regresión con AES aprobada, por lo que se puede avanzar a la Fase 2.
@@ -281,6 +297,8 @@ Comando usado: %env PYTHONPATH=. y !python tests/medir_velocidad.py
 
 **Revisión:** SIN REVISION
 
+**Nota:** los valores de esta fase (N = 30, G = 50, semillas finales 1000 a 1029, 60 corridas finales) son valores iniciales; se cambiaron en las fases 3 y 5a (N = 100, G = 100, semillas 1000 a 1099, 300 corridas finales).
+
 **Atributos del estándar ACM SIGSOFT que cubre:** descripción del artefacto (1), supuestos explícitos (8), evaluación conceptual (3, pendiente).
 
 **Qué se implementó**
@@ -292,7 +310,7 @@ Comando usado: %env PYTHONPATH=. y !python tests/medir_velocidad.py
 **Pruebas** (python -m pytest -q)
 - 15 pruebas pasan (10 de la fase 1 y 5 del motor).
 - Corrida válida (el mejor es permutación), reproducibilidad (misma semilla, mismo CSV), la adaptativa corre, ambas variantes parten de la misma población inicial, y PMX y mutación preservan la permutación en 300 repeticiones.
-- Probado en Google Colab (Fases 5).
+- Probado en Google Colab.
 
 **Tiempos**
 - Corrida de 50 generaciones con N = 30: 1.8 a 2.1 s (la primera, 7.3 s por arranque en frío). Estimación de las 60 corridas finales: unos 2 minutos.
@@ -424,7 +442,7 @@ Las tres cumplen (a) y (b). Elegida: **N = 100, G = 100** (la más barata). Con 
 - Sin histéresis, la adaptativa entraba a "explorar" y no salía nunca (los contadores solo se reinician cuando el mejor mejora, y en exploración casi nunca mejora). Terminaba con mutpb = 0.8 y k = 3 cerca del 80 % del tiempo, comportándose como búsqueda casi aleatoria (fitness 86). La versión final explora ~20 a 43 % del tiempo, con 12 a 14 cambios de modo por corrida.
 
 **Pruebas** (python -m pytest -q)
-- La suite completa pasa, con 1 prueba saltada (sboxU). Total al cierre del proyecto: 103 (ver Fase 5).
+- La suite completa pasa, con 1 prueba saltada (sboxU). Total al cierre del proyecto: ver Fases 5a y 5b.
 - Prueba clave: con factor = 1.0 y k_explorar = k, la adaptativa produce un CSV idéntico al de la estática (salvo la columna `variante`), lo que demuestra que la única diferencia entre variantes es el control de parámetros. Una prueba complementaria verifica que con control activo sí se distinguen.
 - La estática no cambió: con el motor nuevo produce CSV idéntico, al número, al del motor anterior.
 - Pruebas de mutación manuales (la regla y los contadores) y del análisis estadístico: se rompió el código a propósito (sin histéresis, AND por OR, sin bajar k, sin respetar topes, contadores de NL y de δ al revés, sin reiniciar contadores, sentido de la prueba invertido, Holm mal aplicado, bootstrap no pareado, ventana del mecanismo) y los tests fallan. Dos mutaciones sobrevivían a la primera versión de los tests, se agregaron pruebas y ya se detectan.
@@ -455,15 +473,14 @@ La exploración parece costar mejora a corto plazo y recuperarse gradualmente, s
 - Límite: δ tiene poca señal de gradiente (casi no cambia en el mejor individuo), y el fitness toma pocos valores, con muchos empates.
 
 **Supuestos y decisiones**
-- Lectura del protocolo: "adaptarse a ataques" significa usar el resultado de los ataques lineal y diferencial simulados (NL y δ) como señal del lazo. No se implementa un ataque real; el protocolo (1.1.4) excluye diseñar un cifrado completo. [PENDIENTE: confirmar con el asesor]
+- Lectura del protocolo (confirmada con el asesor): "adaptarse a ataques" significa usar el resultado de los ataques lineal y diferencial simulados (NL y δ) como señal del lazo. No se implementa un ataque real; el protocolo (1.1.4) excluye diseñar un cifrado completo.
 - Los parámetros del lazo (k_explorar, topes, div_rec) se fijaron antes de calibrar; ventana, div_min y factor, con la rejilla anterior.
 - No se ajusta más la regla tras ver estos resultados. Si la adaptativa no supera a la estática en las corridas finales, es un resultado válido (riesgo R4) y se discute con el mecanismo de arriba.
 - Experimento suplementario: se ejecutó (ver Fase 5).
 
 **Pendientes**
-- Escribir en config.py ventana = 20, div_min = 0.05 y factor = 2.0, quitando "PROVISIONAL". Resuelto en la Fase 5: config.py congelado.ontraste con sboxU
-- Etapa 5: correr_todo.py (estática, adaptativa y aleatoria, 100 semillas), cifrado.py y contraste de S-boxes. Resuelto en la Fase 5a, salvo el cifrado de archivos (Fase 5b).
-- Actualizar el protocolo: N, G y n (4.4, 5.1.2, 5.2, 5.3, R2, 5.8), el modelo de atacante (1, 1.1.2, 1.1.4, 1.3.1, 2.3.3, 2.3.6, 4.5.3), el plan de análisis (4.6) y el riesgo R8 (el atacante es simulado).
+- Escribir en config.py ventana = 20, div_min = 0.05 y factor = 2.0, quitando "PROVISIONAL". Resuelto en la Fase 5: config.py congelado.
+- Etapa 5: correr_todo.py (estática, adaptativa y aleatoria, 100 semillas), cifrado.py y contraste de S-boxes. Resuelto en las Fases 5a y 5b.
 
 **Hito:** parámetros congelados en config.py (N = 100, G = 100, mutpb = 0.4, indpb = 0.02, k = 5, λ = 2; ventana = 20, div_min = 0.05, factor = 2.0), etiqueta congelado-v1.
 
@@ -502,7 +519,7 @@ Declarado antes de ejecutarse (12 de noviembre, 2026).
 
 **Qué se implementó**
 - `experimentos/correr_todo.py`: corre estática, adaptativa y aleatoria con las semillas 1000 a 1099 (300 corridas). Reanudable, con escritura atómica de cada CSV, guarda la mejor S-box de cada corrida del AG (`sboxes/*.json`), `meta.json` (configuración, commit, fecha) y `entorno.txt`. Se niega a correr si `config.py` no coincide con la configuración congelada o si el directorio contiene corridas de otra configuración.
-- `src/cifrado.py`: sustitución byte a byte con una S-box, con su inversa y variantes para archivos. Pruebas de ida y vuelta con SHA-256 sobre texto, datos vacíos y un binario aleatorio de 3 MB. **Pendiente (Fase 5b):** aplicarlo a archivos binarios reales con las S-boxes generadas por el AG. Es un esquema de demostración, no un cifrado seguro.
+- `src/cifrado.py`: sustitución byte a byte con una S-box, con su inversa y variantes para archivos. Pruebas de ida y vuelta con SHA-256 sobre texto, datos vacíos y un binario aleatorio de 3 MB. Se aplicó a archivos reales con las S-boxes generadas por el AG en la Fase 5b. Es un esquema de demostración, no un cifrado seguro.
 - `experimentos/contraste_final.py`: recalcula NL, δ y fitness de las S-boxes finales con el evaluador, con `verificacion.py` y con sboxU, y los compara con lo guardado en cada corrida.
 - Pruebas de `correr_todo`, `cifrado` y `contraste_final`, con pruebas de mutación manuales (corridas no repetidas, configuraciones no mezcladas, la adaptativa corre como adaptativa, cada implementación del contraste cuenta). Suite: 103 pruebas pasan y 1 se salta (sboxU) en el Python de Colab; con sboxU en el entorno de Sage, 104 pasan sin saltos.
 
@@ -542,7 +559,7 @@ La sensibilidad con Wilcoxon pareado da las mismas conclusiones (p = 0.9998, 0.1
 - Contraste de las S-boxes finales (`contraste_final.py`, Colab, entorno de Sage con sboxU 2.0): 200/200 S-boxes coinciden en NL, δ y fitness entre `evaluador.py`, `verificacion.py` y sboxU. `contraste_sboxu.py`: 51/51. `tests/test_sboxu.py` pasa.
 - Reproducibilidad del análisis: al volver a ejecutar `analisis/estadistica.py` sobre los CSV del repositorio se obtienen las mismas tablas que en la laptop.
 - Reproducibilidad entre máquinas: 3 semillas (1000 a 1002) × 3 variantes recalculadas en Colab con la configuración congelada (CSV de las tres variantes y S-boxes de estática y adaptativa): 15/15 archivos idénticos byte a byte a `resultados/final` (laptop, Python 3.14.7; Colab, entorno de Sage con Python 3.14.10, commit b27f11f). Evidencia en `evidencia/colab_2026-11-14/`. No se probó con otra versión mayor de Python.
-- `demo_cifrado.py`: con una S-box final (estática, semilla 1000; NL = 100, δ = 10) cifra y descifra un mensaje corto, con SHA-256 idéntico al original. Es solo un ejemplo ilustrativo; no sustituye el cifrado de archivos binarios de la Fase 5b.
+- `demo_cifrado.py`: con una S-box final (estática, semilla 1000; NL = 100, δ = 10) cifra y descifra un mensaje corto, con SHA-256 idéntico al original. Es solo un ejemplo ilustrativo; el cifrado de archivos con las mejores S-boxes está en la Fase 5b.
 
 **Supuestos y limitaciones**
 - Los parámetros de ambas variantes se calibraron con 27 configuraciones × 20 semillas preliminares y se congelaron antes de estas corridas. El óptimo de ambas rejillas quedó en el borde.
@@ -574,7 +591,55 @@ Adaptativa − estática en G = 300: fitness +0.05 [−0.70, 0.80]; δ −0.25 [
 - Explicaciones posibles, a tratar como hipótesis y no como hechos probados: (1) explorar tiene un costo inmediato (mecanismo) que a G = 100 no se amortiza; (2) δ casi no cambia en el mejor individuo, por lo que la señal de estancamiento de δ aporta poco al lazo; (3) el fitness toma pocos valores, con muchos empates; (4) la estática calibrada ya es un baseline fuerte; (5) calibrar ambas con 20 semillas pudo sobreestimar a ambas.
 - La contribución verificable: el AG supera a la búsqueda aleatoria; la diferencia entre variantes queda aislada en el lazo de control (prueba de identidad con control neutro); el experimento está acotado, es reproducible y se reporta completo.
 
-**Hito de la Fase 5a:** corridas finales completas (300) y verificadas con sboxU (200/200); H1 no se sostiene; experimento suplementario ejecutado. **Pendiente (Fase 5b):** cifrado de archivos binarios con las S-boxes generadas, con verificación de ida y vuelta (SHA-256).
+**Hito de la Fase 5a:** corridas finales completas (300) y verificadas con sboxU (200/200); H1 no se sostiene; experimento suplementario ejecutado.
+
+---
+
+### Fase 5b: cifrado de archivos binarios con las S-boxes generadas
+
+**Fecha:** 15 de noviembre, 2026
+
+**Rama:** fase-5b-cifrado
+
+**Responsables:** Christian Regina Rodríguez Magaña
+
+**Revisión:** SIN REVISION
+
+**Qué se implementó**
+- `experimentos/generar_muestras.py`: genera de forma determinista los archivos de ejemplo (`ejemplos/`): texto en español con acentos y símbolos (769 B), PNG de 256×256 (3222 B), ejecutable ELF x86-64 mínimo de 129 B que solo termina con código 0, y un archivo vacío. Además, cada corrida genera 1 MiB de bytes aleatorios (semilla fija, no se guarda en el repo).
+- `experimentos/cifrar_archivos.py`: toma la mejor S-box de cada variante y AES como referencia, cifra y descifra cada archivo con `src/cifrado.py`, y escribe `resultados/cifrado/cifrado_archivos.csv` y `comparacion_sboxes.csv`. Sale con error si alguna combinación falla.
+- Regla de "mejor S-box", fijada antes de ver resultados: mayor fitness; en empate, menor δ; en empate, menor semilla.
+
+**Qué se comprueba por cada combinación (3 S-boxes × 5 archivos = 15)**
+- El SHA-256 del archivo recuperado es igual al del original.
+- El archivo cifrado es distinto del original (no aplica al archivo vacío).
+- El ejecutable recuperado se ejecuta y termina con código 0 (solo en Linux; en otros sistemas queda como n/a).
+
+**Resultados**
+
+| S-box | Semilla | NL | δ | Fitness | Sesgo lineal | Prob. diferencial |
+|---|---|---|---|---|---|---|
+| Mejor estática | 1008 | 100 | 8 | 92.0 | 0.1094 | 0.0312 |
+| Mejor adaptativa | 1036 | 100 | 8 | 92.0 | 0.1094 | 0.0312 |
+| AES | – | 112 | 4 | 112.0 | 0.0625 | 0.0156 |
+
+- 15/15 combinaciones recuperan el archivo idéntico, con las tres S-boxes.
+- Las dos mejores S-boxes empatan en NL, δ y fitness; la regla de desempate solo sirvió para elegir dentro de cada variante.
+
+**Pruebas** (python -m pytest -q)
+- 16 pruebas nuevas (`tests/test_cifrar_archivos.py`). Suite completa: 119 pasan y 1 se salta (sboxU).
+- Cubren: muestras deterministas y válidas (firma PNG, ELF), la regla de la mejor S-box con empates, que no mezcla variantes, el recálculo de métricas de AES (112 y 4) y de λ = 2, la ejecución completa, y que se detectan un descifrado corrupto, un cifrado que no cambia nada, un hash que no coincide y un ejecutable que no corre.
+- Pruebas de mutación manuales: se rompió el código a propósito (criterio de mejor invertido en fitness, δ y semilla; comparación de hash siempre verdadera; cifrado distinto siempre verdadero; archivo vacío sin tratamiento aparte; ejecución que ignora el código de salida; fallos que ignoran el hash o la ejecución; λ distinto). Cinco mutaciones sobrevivían a la primera versión de las pruebas y se agregaron pruebas para detectarlas.
+
+**Supuestos y limitaciones**
+- Es un esquema demostrativo. Cada byte se sustituye siempre por el mismo byte (sustitución monoalfabética), por lo que conserva la estructura de frecuencias del archivo y no es seguro por sí solo. Demuestra que las S-boxes obtenidas son biyectivas, reversibles y utilizables como componente de sustitución, no que protejan datos.
+- Las "mejores" S-boxes son el máximo de 100 corridas, no una S-box típica. El rendimiento esperado de cada variante es el de la tabla de la Fase 5a (fitness medio 87.70 y 87.48).
+- La comparación con AES es solo de métricas (NL y δ); no se evalúa su resistencia a ataques reales.
+- La ejecución del archivo recuperado solo se comprueba en Linux.
+
+**Cómo reproducir:** `python -m experimentos.generar_muestras` y luego `python -m experimentos.cifrar_archivos`.
+
+**Hito:** las S-boxes generadas por el AG funcionan como componente de sustitución reversible sobre archivos binarios reales; queda cerrada la implementación y falta el análisis final y la documentación (Fase 6).
 
 ---
 
