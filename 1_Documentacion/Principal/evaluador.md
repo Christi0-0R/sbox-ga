@@ -1,35 +1,36 @@
-# evaluador.py (El juez criptografico)
+# src/evaluador.py (Módulo 2: evaluador criptográfico)
 
-Dada una s-box (lista de 256 valores), calcula DDT, espectro de Walsh, NL, δ y fitness. Es lo que el AG llama miles de veces, por eso esta vectorizado con NumpyPy.
-
-**Constantes precalculadas (se hacen una sola vez al importar)**
-
-- `_X = np.arange(256)`: vector 0..255
-- `_PAR`: tabla de paridad; `_PAR[i]` = 1 si `i` tiene cantidad impar de unos, 0 si par. Sirve para calcular el producto punto binario `ax` (que es la paridadde `a & x`)
-- `_H`: matriz de Hadamard 256x256 con `H[a, x] = (-1)^(ax)`. `np.bitwise_and.outer(_X, _X)` hace `a & x` para todas las parejas; se calcula la paridad y se convierte a ±1 con `1 - 2*paridad` 
-- `_FILAS = (arange(256)*256)[:, None]`: offsets por fila, un truco para el `bincount` de la DDT (abajo)
+**Para qué existe:** calificar cualquier S-box. El AG lo llama una vez por cada individuo nuevo (≈ 10,000 veces por corrida), por eso está vectorizado con NumPy.
 
 ## Funciones
 
-`es_permutacion(sbox)`: Ordena los valores y verifica que sean exactamente 0..255. Es el chequeo de biyectividad.
+| Función | Entrada → salida | Cómo |
+|---|---|---|
+| `es_permutacion(sbox)` | lista → bool | Comprueba que contenga 0 … 255 sin repetir. |
+| `ddt(sbox)` | → matriz 256×256 | `T[dx, dy]` = número de x con `S(x) ⊕ S(x ⊕ dx) = dy`. Se arma toda la matriz `S(x) ⊕ S(x ⊕ dx)` de una vez y se cuenta con `np.bincount`. |
+| `delta(sbox)` | → int | Máximo de la DDT sin la fila `dx = 0` (que siempre vale 256 en `dy = 0`). |
+| `walsh(sbox)` | → matriz 256×256 | Espectro `W[a, b] = Σₓ (−1)^(a·x ⊕ b·S(x))`, calculado como producto de la matriz de Hadamard `H[a, x]` por `F[x, b]`. La LAT es `W / 2`. |
+| `nl(sbox)` | → int | `128 − max|W[a, b]| / 2` con `b ≠ 0` (la columna `b = 0` no es una función componente). |
+| `metricas(sbox)` | → (NL, δ) | Calcula ambas una sola vez; es la que usa el motor. |
+| `fitness_de(nl, δ, lam)` | → float | `NL − lam·(δ − 4)`. Con `lam = 2`, AES da 112. |
+| `fitness(sbox, lam)` | → float | Atajo: `fitness_de(*metricas(sbox))`. |
+| `sesgo_lineal(nl)` | → float | Sesgo del mejor ataque lineal: `(128 − NL) / 256`. AES: 0.0625. |
+| `prob_diferencial(δ)` | → float | Probabilidad del mejor ataque diferencial: `δ / 256`. AES: 0.0156. |
 
-**`ddt(sbox)`: tabla de distribución de diferencias -** `T[dx, dy]` = cuántos `x` cumplen `S(x) ⊕ S(x⊕dx) = dy`
+## Por qué el fitness es `NL − 2(δ − 4)`
 
-- `s[_X[None,:] ^ _X[:,None]]`: calcula S(x ⊕ dx) para todas las parejas (dx, x) de golpe, gracias al broadcasting
-- `dy = s[None,:] ^ ...`: le hace XOR con `S(x)`. Queda una matriz `dy[dx, x]`
-- Luego hay que contar, por cada fila `dx`, cuántas veces aparece cada `dy`. El truco: sumar `_FILAS` (dx·256) a cada `dy` convierte cada pareja (dx, dy) en un índice único de 0..65535, y un solo `np.bincount` cuenta todo. `reshape(256,256)` lo regresa a tabla
-- Propiedad que pruebas: cada fila suma 256.
+- Es mono-objetivo y agregado (decisión metodológica del protocolo, sección 2.2).
+- Restar 4 hace que AES quede como cota natural (fitness = NL = 112 cuando δ = 4).
+- `lam = 2` está **fijo** desde antes de calibrar (riesgo R7). Con eso, bajar δ en 2 vale lo mismo que subir NL en 4. Como NL y δ casi siempre son pares, el fitness toma pocos valores distintos (muchos empates en las pruebas estadísticas).
 
-**`delta(sbox)`: uniformidad diferencial -** `ddt(sbox)[1:].max()`: el máximo de la DDT excluyendo la fila 0 `(dx = 0)`, porque ahí siempre vale 256 (diferencia de entrada cero da diferencia de salida cero). Menor δ = mejor resistencia diferencial. AES: 4
+## Modelo de atacante
 
-**`walsh(sbox)`: espectro de Walsh -** `W[a,b] = Σₓ (-1)^(a·x ⊕ b·S(x))`
+NL y δ son, respectivamente, la fuerza del mejor ataque lineal y del mejor ataque diferencial contra la S-box sola. `sesgo_lineal` y `prob_diferencial` los expresan en la escala del atacante. La variante adaptativa reacciona al estancamiento de estas dos señales; la estática no. No se implementa un ataque criptoanalítico real.
 
-- `F[x,b] = (-1)^(b·S(x))`: construye la matriz de las funciones componente
-- `_H @ F`: una multiplicación matricial calcula la suma para todos los (a, b) a la vez
-- `np.rint(...).astype(int64)`: redondea (los floats pueden traer error de 1e-13) a enteros exactos
+## Cómo se verifica (`tests/test_evaluador.py`)
 
-**`nl(sbox)`: no-linealidad -** `128 − max|W(a,b)| / 2`, con `b ≠ 0` (por eso `W[:, 1:]`; b=0 sería la función constante). Intuición: mientras más grande sea el sesgo lineal máximo, más cerca está la S-box de una función afín y menor NL. AES: 112
-
-`LAMBDA = 2.0`: Peso con que δ penaliza (Provisional)
-
-`fitness(sbox, lam)`: `NL − λ·(δ − 4)`. Un δ de 4 no penaliza nada (es el de AES); cada unidad extra de δ resta 2 puntos. Con resultados preliminares (NL = 98, δ = 10): 98 − 2·6 = 86.0
+- Regresión: AES da NL = 112, δ = 4, fitness = 112, sesgo 0.0625, probabilidad 0.0156.
+- La identidad (x → x) es lineal: NL = 0, δ = 256.
+- Cada fila de la DDT suma 256.
+- Coincide con `verificacion.py` en AES y en permutaciones aleatorias.
+- `sesgo_lineal` coincide con el máximo del espectro de Walsh calculado aparte.

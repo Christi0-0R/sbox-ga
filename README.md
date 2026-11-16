@@ -122,7 +122,7 @@ sbox-ga/
 │
 ├── evidencia/                    # Salidas de las verificaciones hechas en Colab (sboxU, reproducibilidad)
 │
-├── 1_Documentacion/              # Documentación (pendiente de regenerar, Fase 6)
+├── 1_Documentacion/              # Explicación de cada archivo y referencias (ver INDICE.md)
 │
 └── notebooks/
     ├── colab_main.ipynb                 # Clona el repositorio y ejecuta en Google Colab
@@ -227,16 +227,13 @@ Limitación: el evaluador y `verificacion.py` los escribió el mismo equipo, por
 
 - [x] Fase 0: repositorio, entorno local, entorno de Colab y pruebas funcionando
 - [x] Fase 1: álgebra de GF(2^8) y evaluador, con regresión contra AES (NL = 112, δ = 4)
-- [x] Fase 2: motor evolutivo (estático, corridas preliminares, adaptativo inicial)
+- [x] Fase 2a: motor evolutivo (estático, corridas preliminares, adaptativo inicial)
 - [x] Fase 2b: correcciones del motor y de las pruebas
 - [x] Fase 3: calibración de N, G y de la estática (compuerta contra búsqueda aleatoria)
 - [x] Fase 4: adaptativa rediseñada, modelo de atacante, calibración y Módulo 6
 - [x] Fase 5a: corridas finales, contraste con sboxU y experimento suplementario
 - [x] Fase 5b: cifrado de archivos binarios con las S-boxes generadas
 - [ ] Fase 6: análisis de resultados y documento final
-  - Regenerar `1_Documentacion/` (está desactualizada respecto al código).
-  - Confirmar con el asesor: λ fijo en 2 y cómo se reporta el resultado negativo de H1.
-  - Redactar el informe final (entrega: 6 de diciembre).
 
 ## 8.1 Bitácora de fases
 
@@ -276,18 +273,18 @@ Comando usado: %env PYTHONPATH=. y !python tests/medir_velocidad.py
 
 **Supuestos y decisiones**
 - inv(0) = 0, por convención de AES.
-- LAMBDA = 2.0 es provisional. Se calibra en las corridas preliminares y se congela antes de las corridas finales (riesgo R7). Nota: aquí se hablaba de 60 corridas finales (valor inicial); luego se amplió a 300 corridas (100 semillas × 3 variantes), ver Fase 5a.
-- La DDT 4x4 usa la S-box de PRESENT (Bogdanov et al., 2007). [PENDIENTE: contrastar los valores de analisis/ejemplo_4x4.py con la tabla del artículo.]
+- LAMBDA = 2.0 era provisional en esta fase. Después se decidió dejarlo fijo, sin calibrar (Fase 3, riesgo R7). Nota: aquí se hablaba de 60 corridas finales (valor inicial); luego se amplió a 300 corridas (100 semillas × 3 variantes), ver Fase 5a.
+- La DDT 4x4 usa la S-box de PRESENT (Bogdanov et al., 2007). Resuelto en la Fase 6: el artículo no publica la DDT completa, así que se comprueban sus criterios de diseño (sección 4.3).
 
 **Hito:** regresión con AES aprobada, por lo que se puede avanzar a la Fase 2.
 
 **Pendientes heredados**
 - Definir con el asesor cómo se hará el contraste con sboxU (requiere Sage). Resuelto en la Fase 5a.
-- Agregar como referencia valores de NL y δ reportados en la literatura (Picek et al., 2016; Clark et al., 2004), extraídos directamente de los artículos.
+- Agregar como referencia valores de NL y δ reportados en la literatura (Picek et al., 2016; Clark et al., 2004), extraídos directamente de los artículos. Resuelto en la Fase 6 (parcial: el valor de Picek et al. falta confirmarlo en el artículo).
 
 ---
 
-### Fase 2: motor evolutivo
+### Fase 2a: motor evolutivo
 
 **Fecha:** 5 de noviembre, 2026
 

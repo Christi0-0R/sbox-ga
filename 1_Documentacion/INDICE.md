@@ -1,109 +1,60 @@
-# Explicacion de la estructura y archivos
+# Documentación de sbox-ga
+
+Explicación de la estructura y de cada archivo del repositorio, al día con el código de la Fase 5b (configuración congelada `congelado-v1`). El README tiene el método, la bitácora y los resultados; aquí se explica **qué hace cada pieza y cómo se conecta con las demás**.
 
 ## La idea general
 
-- Una S-box es una tabla de 256 números que “revuelve” bytes (cada número del 0 al 255 se cambia por otro, sin repetir). Es la pieza que hace difícil descifrar un mensaje sin la clave.
+- Una S-box de 8×8 es una tabla de 256 números (una permutación de 0 a 255) que "revuelve" bytes. Es la única pieza no lineal de un cifrado como AES.
+- Su calidad se mide con dos números: **NL** (no-linealidad, más alta es mejor) y **δ** (uniformidad diferencial, más baja es mejor). La S-box de AES tiene NL = 112 y δ = 4 y se usa como cota de referencia.
+- Hay 256! tablas posibles, así que no se pueden probar todas. Se usa un **algoritmo genético de permutación**: una población de S-boxes que se seleccionan, cruzan y mutan según un fitness `NL − 2·(δ − 4)`.
+- Se comparan dos variantes que comparten todo el código salvo una cosa: la **estática** usa parámetros fijos y la **adaptativa** cambia mutpb, indpb y el tamaño de torneo según el estancamiento de NL y δ y la diversidad de la población. Una **búsqueda aleatoria** con el mismo presupuesto sirve como piso de sanidad.
 
-- Hay dos medidas de qué tan buena es: NL (más alta = mejor) y δ (más baja = mejor). La S-box de AES tiene NL = 112 y δ = 4, y es la referencia.
+## Flujo de datos
 
-- Como hay un número absurdo de tablas posibles, no se pueden probar todas. Se usa un algoritmo genético: una población de tablas que “evoluciona” (las mejores se reproducen, se mezclan y mutan). El proyecto compara una versión que no cambia sus reglas con otra que sí las ajusta mientras corre.
+```
+config.py ──► motor_ga.py ──► resultados/final/<variante>_<semilla>.csv  ──► analisis/estadistica.py ──► tablas y gráficas
+                 │                               │
+           evaluador.py                    sboxes/*.json ──► contraste_final.py (evaluador, verificacion, sboxU)
+           (NL, δ, fitness)                       └──────────► cifrar_archivos.py ──► resultados/cifrado/
+```
 
-## `src/`: las piezas del programa
+## Mapa de esta carpeta
 
-### `gf256.py`: “la calculadora especial”
+| Archivo | Qué explica |
+|---|---|
+| `Principal/gf256.md` | Módulo 1: aritmética de GF(2⁸) y S-box de AES |
+| `Principal/evaluador.md` | Módulo 2: DDT, espectro de Walsh, NL, δ, fitness y modelo de atacante |
+| `Principal/verificacion.md` | Módulo 4: segunda implementación y puente con sboxU |
+| `Principal/motor_ga.md` | Módulo 3: AG estático y adaptativo |
+| `Principal/cifrado.md` | Módulo 5: sustitución byte a byte (demostrativo) |
+| `Principal/config.md` | Parámetros congelados y semillas |
+| `Experimentos/calibracion.md` | Fases 3 y 4: calibración de N y G, de la estática y de la adaptativa |
+| `Experimentos/correr_todo.md` | Fase 5a: corridas finales y experimento suplementario |
+| `Experimentos/contraste.md` | Verificación cruzada con sboxU |
+| `Experimentos/cifrado_archivos.md` | Fase 5b: cifrado de archivos reales |
+| `Analisis/estadistica.md` | Módulo 6: pruebas estadísticas, tablas y gráficas |
+| `Resultados/columnas_csv.md` | Qué significa cada columna de los CSV de corridas |
+| `Resultados/Prelim/estatica_1.md` | Histórico: CSV de la Fase 2 (N = 30, G = 50), ya no vigente |
+| `Test/pruebas.md` | Qué cubre cada archivo de pruebas |
+| `Referencias/literatura_nl_delta.md` | Valores de NL y δ reportados en la literatura, para la discusión |
 
-- **Qué es**: las matemáticas del campo GF(2⁸), que es un sistema donde sumar y multiplicar números de 0 a 255 siempre da otro número de 0 a 255.
+## Correspondencia con el protocolo
 
-- **Qué hace**: multiplica, saca inversos y, con eso, construye la S-box de AES desde cero.
+| Protocolo | Código |
+|---|---|
+| Módulo 1, Álgebra de GF(2⁸) (OE3) | `src/gf256.py` |
+| Módulo 2, Evaluador criptográfico (OE3) | `src/evaluador.py` |
+| Módulo 3, Motor evolutivo (OE4) | `src/motor_ga.py` |
+| Módulo 4, Verificación cruzada (OE6) | `src/verificacion.py`, `experimentos/contraste_sboxu.py`, `experimentos/contraste_final.py` |
+| Módulo 5, Cifrado de archivos binarios (OE6) | `src/cifrado.py`, `experimentos/cifrar_archivos.py` |
+| Módulo 6, Análisis experimental (OE5) | `analisis/estadistica.py` |
 
-- **Para qué sirve**: para tener una tabla de la que sabemos la respuesta correcta (NL = 112, δ = 4) y verificar que nuestro “juez” funciona.
+## Archivos históricos
 
-- **Analogía**: es como fabricar una regla de 1 metro perfecta para comprobar que tu cinta métrica mide bien.
+Siguen en el repositorio para trazabilidad, pero pertenecen a la Fase 2 y usan la configuración vieja:
 
-### `evaluador.py`: “el juez”
+- `experimentos/prelim_estatica.py`, `experimentos/calibracion.py`
+- `analisis/graficas_prelim.py`, `analisis/resumen_prelim.py`, `analisis/prelim_estatica.png`
+- `resultados/archivo_v1/`
 
-- **Qué es**: el programa que califica cualquier S-box.
-
-- **Entra**: una lista de 256 números. Sale: NL, δ y un fitness (una calificación única).
-
-- **Cómo lo hace:**
-    - `ddt` y `delta`: cuentan qué tan “predecible” es la tabla (si un cambio en la entrada produce siempre el mismo cambio en la salida, es mala).
-    - `walsh` y `nl`: miden qué tan parecida es la tabla a una operación simple y lineal (si se parece mucho, es mala).
-    - `fitness`: junta ambas en un número: `NL − 2 × (δ − 4)`.
-    - `es_permutacion`: revisa que no haya números repetidos ni faltantes.
-
-- **Analogía**: un juez de concurso que da una calificación final combinando dos criterios.
-
-- **Detalle**: está escrito con NumPy para calificar rápido, porque el algoritmo lo llama miles de veces.
-
-### `verificacion.py`: “el segundo juez”
-
-- **Qué es**: calcula NL y δ otra vez, pero con un método distinto y más lento.
-
-- **Para qué sirve**: si los dos jueces dan siempre lo mismo, es muy probable que ninguno tenga errores.
-
-- **Analogía**: sacar una cuenta con calculadora y luego a mano, para confirmar.
-
-### `motor_ga.py`: “el criadero”
-
-- **Qué es**: el algoritmo genético completo. Es el archivo principal.
-
-- **Qué hace en cada corrida**:
-    1. Crea 30 S-boxes al azar (la población inicial).
-    2. Las califica con el juez.
-    3. Selecciona las mejores (torneo: elige 3 al azar y gana la mejor).
-    4. Las cruza (mezcla dos tablas sin repetir números, con PMX).
-    5. Las muta (intercambia algunos números de lugar).
-    6. Guarda al mejor siempre (elitismo), para no perderlo.
-    7. Repite 50 veces y escribe todo en un archivo CSV.
-
-- **Funciones auxiliares**:
-    - `diversidad`: mide qué tan distintas son las tablas entre sí (si todas se parecen, la búsqueda se estancó).
-    - `actualizar_parametros`: la parte adaptativa. Si la búsqueda se estanca, sube la probabilidad de mutar.
-
-- **Analogía**: un criadero de plantas donde cada generación dejas reproducirse a las mejores. La versión estática siempre usa la misma receta, y la adaptativa cambia la receta si ve que ya no avanza.
-
-## `experimentos/`: los controles y las corridas
-
-### `config.py`: “el panel de perillas”
-
-- **Qué es**: un solo lugar con todos los ajustes (tamaño de población, generaciones, probabilidades de cruce y mutación, etc.) y las listas de semillas.
-
-- **Para qué sirve**: que ambas variantes usen exactamente los mismos ajustes, para que la única diferencia sea la adaptación.
-
-- **Las semillas**: son números que fijan el azar. Con la misma semilla, el programa da siempre el mismo resultado. Se separan en preliminares (1 a 5, para probar) y finales (1000 a 1029, para el experimento real).
-
-### `prelim_estatica.py`: “la prueba de arranque”
-
-- Corre la versión estática con las 5 semillas de prueba y cronometra cada una.
-
-- Sirve para ver si el criadero funciona y dónde se atora.
-
-### `calibracion.py`: “probar las perillas”
-
-- Corre la versión adaptativa con 12 combinaciones de ajustes y 2 controles estáticos, y muestra una línea de resultado por cada una.
-
-- Sirve para decidir qué ajustes usar antes del experimento real. Se hace con semillas de prueba para no “hacer trampa” con las finales.
-
-## `analisis/`: para mirar los resultados
-
-### `ejemplo_4x4.py`: “el ejemplo de juguete”
-
-- Calcula la tabla de diferencias de una S-box diminuta (4 bits, la de PRESENT) para que se vea a ojo lo que el evaluador hace en grande. No forma parte del experimento.
-
-### `graficas_prelim.py`: “los dibujos”
-
-- Lee los CSV y dibuja 4 gráficas (fitness, NL, δ, diversidad contra generación), una línea por semilla. Sirve para ver el estancamiento.
-
-### `resumen_prelim.py`: “los números clave”
-
-- Imprime, para cada semilla, cómo iba en las generaciones 0, 10, 25 y 50. Es la versión en texto de las gráficas.
-
-## `tests/`: las pruebas automáticas
-
-Son programas que revisan que todo lo demás siga funcionando. Se ejecutan con `python -m pytest -q`.
-
-- `test_gf256.py`: comprueba que la calculadora dé resultados conocidos (por ejemplo, que la S-box de AES empiece con 0x63).
-- `test_evaluador.py`: comprueba que el juez dé 112 y 4 para AES, que ambos jueces coincidan y que una tabla trivial (x → x) saque la peor nota.
-- `test_motor.py`: comprueba que las tablas que produce el criadero sigan siendo válidas, que la misma semilla dé el mismo resultado y que la versión adaptativa corra sin fallar.
-- `medir_velocidad.py`: no es una prueba, es un cronómetro. Mide cuánto tarda una calificación para estimar cuánto durará el experimento completo.
+`analisis/comprobaciones.py` comprueba que las primeras 100 generaciones del experimento suplementario (G = 300) sean idénticas a las corridas finales.

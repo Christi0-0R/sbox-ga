@@ -40,7 +40,7 @@ def metricas(sbox):
     return nl(sbox), delta(sbox)
     # NL y delta de una sbox, cada una calculada una sola vez
 
-# Provisional: se fija con las corridas preliminares (riesgo R7)
+# Fijo en 2.0: decisión metodológica tomada antes de calibrar (riesgo R7)
 LAMBDA = 2.0
 
 def fitness_de(nl_, delta_, lam = LAMBDA):

@@ -1,41 +1,61 @@
-# motor_ga.py (el corazón)
+# src/motor_ga.py (Módulo 3: motor evolutivo)
 
-### Preámbulo
+**Para qué existe:** ejecutar una corrida completa del AG de permutación, en su variante estática o adaptativa, y escribir un CSV con una fila por generación. Usa DEAP para los operadores.
 
-- `creator.create("FitnessMax", ..., weights=(1.0,))`: fitness a maximizar, un solo objetivo. Individual es una lista con ese fitness. El if not hasattr evita error si el módulo se importa dos veces.
-- `_evaluar(ind)`: DEAP exige que el fitness sea una tupla, por eso (fitness(ind),).
+## Preámbulo
 
-### diversidad(pop, rng)
+- `creator.create("FitnessMax", ..., weights=(1.0,))`: un solo objetivo, a maximizar. `Individual` es una lista con ese fitness. El `if not hasattr` evita un error si el módulo se importa dos veces.
+- `N_PARES_DIV = 100`: pares muestreados para estimar la diversidad.
 
-Toma 100 pares al azar de la población y calcula, para cada par, la fracción de posiciones (de 256) donde difieren (distancia de Hamming normalizada). Promedia. 0 = clones; ~1 = totalmente distintos (dos permutaciones aleatorias difieren en casi todas las posiciones, por eso la gen. 0 da ≈1.0). Usa su propio rng para que medir la diversidad no consuma números aleatorios de la evolución: así la estática y la adaptativa siguen idénticas hasta que el lazo intervenga.
+## Funciones
 
-### actualizar_parametros(mutpb, sin_mejora, div, cfg)
+### `_evaluar(ind, lam)`
+Calcula NL y δ **una sola vez** con `metricas`, los guarda en el individuo (`ind.nl`, `ind.delta`) y fija `ind.fitness.values = (fitness,)` (DEAP exige tupla).
 
-El lazo adaptativo (placeholder). Si hay estancamiento (sin_mejora >= ventana) o poca diversidad (div < div_min), sube mutpb multiplicándolo por factor (con tope mutpb_max). Si no, lo baja dividiendo por factor (con piso en el mutpb base).
+### `diversidad(pop, rng)`
+Distancia de Hamming media normalizada entre 100 pares al azar: para cada par, la fracción de las 256 posiciones en que difieren. 0 = clones; ≈ 1 = totalmente distintos (dos permutaciones aleatorias difieren en casi todas las posiciones). Usa **su propio generador** (`semilla + 7919`), para que medir la diversidad no consuma números aleatorios de la evolución.
 
-Ojo, esto conecta con tu hallazgo de calibración: con div_min = 0.5 y la diversidad cayendo rápido, la condición casi siempre se cumple, mutpb se queda pegado al tope y la adaptativa se vuelve una estática con mutpb ≈ 0.8. Por eso dices que hay que rediseñar el lazo.
+### `explorando(p, cfg)`
+La adaptativa está en modo explorar si su torneo vigente es `k_explorar` (y `k_explorar ≠ k`).
 
-### correr(semilla, adaptativo, cfg, ruta_csv): una corrida completa
+### `actualizar_parametros(p, ind, cfg)` (la regla adaptativa)
+Función pura: recibe los parámetros vigentes `p = {mutpb, indpb, k}` y los indicadores `ind = {sin_mejora_nl, sin_mejora_delta, div}`, y devuelve parámetros nuevos sin modificar sus argumentos.
 
-**Inicialización**
+```
+si está explorando y div ≥ div_rec:            → EXPLOTAR (mutpb, indpb, k de la estática)
+si está explorando, o
+   (sin_mejora_nl ≥ ventana Y sin_mejora_delta ≥ ventana), o
+   div < div_min:                              → EXPLORAR
+        mutpb ← min(mutpb·factor, mutpb_max)
+        indpb ← min(indpb·factor, indpb_max)
+        k     ← k_explorar
+si no:                                         → sin cambios
+```
 
-- random.seed(semilla): reproducibilidad.
-- rng_div: generador aparte (semilla + 7919) para la diversidad.
-- Crea N individuos como permutaciones barajadas de 0..255 y los evalúa. Como la semilla es la misma, ambas variantes arrancan con la misma población inicial (tu prueba lo verifica).
-- hof = HallOfFame(1): guarda el mejor individuo histórico.
+La **histéresis** (entrar con `div_min`, salir con `div_rec`) evita que la regla se quede atorada en un modo; la primera versión sin histéresis exploraba ~80 % del tiempo y se comportaba como búsqueda aleatoria.
 
-**Variables de control**: cxpb, mutpb, mejor_hist (mejor fitness visto) y sin_mejora (contador de estancamiento).
+### `_descendencia(pop, cxpb, mutpb, indpb, k, lam)`
+1. Selección por torneo de tamaño `k` (`selTournament`) y copias profundas.
+2. Cruce PMX (`cxPartialyMatched`) por parejas con probabilidad `cxpb`; preserva la permutación.
+3. Mutación `mutShuffleIndexes` con probabilidad `mutpb`; cada posición se intercambia con probabilidad `indpb`; también preserva la permutación.
+4. Evalúa solo los individuos que cambiaron (`not ind.fitness.valid`).
 
-### Ciclo for g in range(G+1) (G+1 porque incluye la generación 0):
+### `correr(semilla, adaptativo, cfg, ruta_csv)`
+**Inicialización:** `random.seed(semilla)`, N permutaciones barajadas y evaluadas. Con la misma semilla, ambas variantes (y la búsqueda aleatoria) parten de la misma población. `HallOfFame(1)` guarda el mejor histórico.
 
-1. Medición: toma el mejor, los fitness, y la diversidad.
-2. Contador de estancamiento: si el mejor superó al histórico, lo actualiza y reinicia el contador; si no, suma 1. (Solo desde g > 0.)
-3. Registro: guarda una fila con todas las métricas (la que va al CSV: variante, semilla, generación, fitness mejor/promedio, NL, δ, diversidad, sin_mejora, mutpb, cxpb). Si es la última generación, break.
-4. Única diferencia entre variantes: si es adaptativa, actualiza mutpb.
-5. Selección: torneo de tamaño k (elige k al azar y gana el mejor), y copias profundas para no modificar a los padres.
-6. Cruce: recorre las parejas (off[0],off[1]), (off[2],off[3])...; con prob. cxpb aplica PMX (cruce parcialmente mapeado, que garantiza hijos que siguen siendo permutaciones) y borra el fitness para forzar reevaluación.
-7. Mutación: con prob. mutpb aplica mutShuffleIndexes (intercambia posiciones con prob. indpb, también preserva la permutación).
-8. Reevaluación solo de los que cambiaron (if not ind.fitness.valid), para ahorrar cómputo.
-8. Elitismo: ordena la nueva generación de peor a mejor y reemplaza al peor por el mejor histórico, para que nunca se pierda lo ganado. Actualiza pop y hof.
+**Ciclo `for g in range(G + 1)`:**
+1. Mide: mejor individuo, fitness de la población y diversidad.
+2. Actualiza contadores (desde `g > 0`): `sin_mejora` (fitness del mejor), `sin_mejora_nl` (mejor NL de la población) y `sin_mejora_delta` (mejor δ de la población).
+3. Registra la fila del CSV (ver `Resultados/columnas_csv.md`). En la última generación termina.
+4. **Única diferencia entre variantes:** si es adaptativa, llama a `actualizar_parametros`. Al salir de explorar, los contadores de NL y δ se reinician (el estancamiento se mide desde cero).
+5. Genera la descendencia con los parámetros vigentes.
+6. Elitismo: el mejor histórico reemplaza al peor descendiente.
 
-Salida: escribe el CSV (crea la carpeta si no existe) y devuelve el mejor individuo.##
+**Salida:** escribe el CSV (saltos de línea LF) y devuelve el mejor individuo.
+
+## Garantías probadas (`tests/test_motor.py`)
+
+- Con `factor = 1.0` y `k_explorar = k` (control neutro), la adaptativa produce un CSV idéntico al de la estática, salvo la columna `variante`: la única diferencia entre variantes es el lazo.
+- La misma semilla da el mismo CSV; semillas distintas dan corridas distintas.
+- El elitismo funciona (el mejor siempre sigue en la población) y todo descendiente es una permutación con métricas vigentes.
+- La regla respeta los topes, no modifica sus argumentos, no explora si solo NL está estancado y no se queda atorada explorando.

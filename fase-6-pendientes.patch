@@ -1,0 +1,1080 @@
+diff --git a/1_Documentacion/Analisis/estadistica.md b/1_Documentacion/Analisis/estadistica.md
+new file mode 100644
+index 0000000..cd932cb
+--- /dev/null
++++ b/1_Documentacion/Analisis/estadistica.md
+@@ -0,0 +1,40 @@
++# analisis/estadistica.py (Módulo 6: análisis experimental)
++
++**Para qué existe:** generar, con un solo comando y a partir de los CSV, todas las tablas y gráficas del análisis. El plan de análisis está escrito en el docstring y se fijó antes de ver los resultados finales.
++
++```
++python -m analisis.estadistica resultados/final
++```
++
++Escribe en `resultados/final/analisis/`: `descriptiva.csv`, `principal.csv`, `secundarias.csv`, `vs_aleatoria.csv` y `convergencia_{fit,nl,delta}_mejor.png`.
++
++## Plan de análisis
++
++| Nivel | Qué se compara | Prueba |
++|---|---|---|
++| **Principal (H1)** | Adaptativa vs. estática en NL (mayor), δ (menor) y fitness (mayor) del mejor individuo final | Mann-Whitney unilateral con corrección de Holm sobre las tres |
++| Sensibilidad | Lo mismo, pareado por semilla (ambas parten de la misma población) | Wilcoxon pareado |
++| Efecto | Diferencia de medias | IC 95 % por bootstrap pareado (10,000 remuestreos) y delta de Cliff |
++| Secundarias (descriptivas) | Área bajo la curva de fitness; NL y δ medios de la población final | Igual que la principal |
++| Mecanismo (descriptivo) | Mejora del fitness en las 10 generaciones tras cada entrada a explorar, contra la estática en esas mismas generaciones | Sin prueba (los eventos de una corrida no son independientes) |
++| Referencias | Cada variante vs. búsqueda aleatoria; AES como cota | Mann-Whitney con Holm |
++
++## Funciones
++
++| Función | Qué hace |
++|---|---|
++| `cargar_corridas(dir, variante)` | Lee `<variante>_<semilla>.csv` en un diccionario por semilla. |
++| `resumen_corridas` | Una fila por corrida: métricas finales, AUC, promedios de la población final. |
++| `holm(pvals)` | Corrección de Holm-Bonferroni (con monotonía). |
++| `cliff(a, b)` | Delta de Cliff: P(a > b) − P(a < b). |
++| `comparar(a, b, sentido)` | Diferencia, IC bootstrap pareado, Mann-Whitney, Wilcoxon y Cliff. Exige las mismas semillas en ambos grupos. El Cliff que reporta está orientado: positivo = `a` es **mejor** que `b` en el sentido de H1 (por eso en δ se invierte el signo). |
++| `tabla_comparacion` | Aplica `comparar` a varias métricas y corrige con Holm. |
++| `mecanismo` | Ganancia media tras cada entrada a explorar. |
++| `descriptiva` | Media y desviación estándar por variante, con sesgo lineal y probabilidad diferencial. |
++| `graficas` | Media y rango intercuartil entre semillas, por generación. |
++
++## Notas de interpretación
++
++- Los promedios de la población final dependen del modo en que termina cada corrida (si termina explorando, la población es más diversa y peor en promedio), así que miden diversidad más que calidad.
++- El fitness toma pocos valores distintos: hay muchos empates, lo que reduce la potencia de las pruebas basadas en rangos.
++- Las pruebas son unilaterales en el sentido de H1; una diferencia en contra (como la de NL) se reporta como descriptiva, con su IC.
+diff --git a/1_Documentacion/Experimentos/calibracion.md b/1_Documentacion/Experimentos/calibracion.md
+index d148584..fde9043 100644
+--- a/1_Documentacion/Experimentos/calibracion.md
++++ b/1_Documentacion/Experimentos/calibracion.md
+@@ -1,17 +1,35 @@
+-# calibracion.py
++# Calibración (Fases 3 y 4)
+ 
+-Explora la variante adaptativa para ver cómo se comporta con distintos umbrales.
++**Para qué existe:** fijar N, G y los parámetros de cada variante **antes** de las corridas finales, con el mismo esfuerzo para ambas, usando solo las semillas preliminares (1 a 20). Todos los criterios se escribieron en el docstring de cada script antes de ver resultados. Los tres scripts son reanudables (omiten los CSV que ya existen) y usan varios procesos.
+ 
+-resumen(nombre, cfg, adaptativo)
++## 1. `experimentos/calibracion_NG.py`: ¿qué N y G?
+ 
+-- Para cada semilla preliminar corre el AG y guarda el CSV en resultados/calib/.
+-- Lee el CSV y extrae: fitness, NL y δ finales (d.iloc[-1], última fila), y la diversidad y mutpb promedio desde la generación 10 (.iloc[10:]), para ignorar el arranque.
+-- Promedia sobre las 5 semillas e imprime una línea.
++- Barre (N, G) ∈ {(100, 100), (100, 200), (200, 200)} con 20 semillas, corriendo la estática y la búsqueda aleatoria.
++- Criterios: (a) la estática supera a la aleatoria (Mann-Whitney unilateral, p < 0.05) y (b) la búsqueda se estanca (≥ 50 % de las corridas no mejoran en el último 20 % de las generaciones; si no se estancara, la adaptativa no tendría nada que corregir).
++- Se elige la más barata que cumpla ambos: **N = 100, G = 100**.
++- Salida: `resultados/calib_NG/`.
+ 
+-Rejilla:
++## 2. `experimentos/calibracion_estatica.py`: parámetros de la estática
+ 
+-- 2 controles estáticos: estatica_base (mutpb=0.2) y estatica_mutpb0.8. El segundo es el control clave: si la adaptativa se comporta igual que esta, la “adaptación” no aporta nada.
+-- 12 adaptativas: div_min ∈ {0.05, 0.1, 0.2, 0.5} × ventana ∈ {3, 5, 8}.
+-- Total 14 configuraciones, como dice tu bitácora.
++- Rejilla `mutpb ∈ {0.1, 0.2, 0.4}` × `indpb ∈ {0.01, 0.02, 0.05}` × `k ∈ {2, 3, 5}` = 27 configuraciones × 20 semillas.
++- Criterio: mayor fitness final medio. Si varias quedan a menos de `TOLERANCIA = 0.3` del mejor, gana la más cercana a la configuración base (menor distancia en posiciones de la rejilla).
++- Elegida: **mutpb = 0.4, indpb = 0.02, k = 5**.
++- Salida: `resultados/calib_estatica/`.
+ 
+-Observación para tu documentación: el criterio que usaste (comparar contra una estática con mutpb alto) es muy sensato, porque separa “el efecto de adaptar” del “efecto de simplemente mutar más”. Y tu pendiente de “esfuerzo de calibración equivalente para la estática” está bien identificado: la adaptativa tuvo 12 configuraciones y la estática solo 2, lo cual podría favorecer a la adaptativa en la comparación final.
+\ No newline at end of file
++## 3. `experimentos/calibracion_adaptativa.py`: umbrales de la adaptativa
++
++- Rejilla `ventana ∈ {5, 10, 20}` × `div_min ∈ {0.05, 0.15, 0.30}` × `factor ∈ {1.25, 1.5, 2.0}` = 27 configuraciones × 20 semillas (el mismo presupuesto que la estática).
++- **Compuerta:** solo es elegible una configuración que pase en modo explorar entre el 5 % y el 70 % de las generaciones (menos: el control casi no actúa; más: se vuelve búsqueda casi aleatoria). Las 27 pasaron.
++- Criterio: mayor fitness final medio; en empate (< 0.3), la más "simple": factor menor, luego ventana mayor, luego div_min menor.
++- Elegida: **ventana = 20, div_min = 0.05, factor = 2.0**.
++- También corre la estática calibrada en las mismas semillas, solo como referencia (no interviene en la elección).
++- Salida: `resultados/calib_adaptativa/`.
++
++## Avisos que hay que repetir en el informe
++
++- Elegir el máximo de 27 medias sobreestima un poco el valor real; por eso los valores p sobre semillas de calibración no son evidencia de H1.
++- El óptimo de ambas rejillas quedó en el borde (estática: mutpb y k máximos; adaptativa: ventana y factor máximos, div_min mínimo). No se amplió ninguna para no dar más esfuerzo a una variante que a la otra. Es una limitación declarada.
++
++## Scripts históricos (Fase 2)
++
++`experimentos/calibracion.py` y `experimentos/prelim_estatica.py` corresponden a la primera versión del motor (N = 30, G = 50, regla adaptativa sin histéresis, 14 configuraciones). Sus resultados están en `resultados/archivo_v1/` y ya no se usan.
+diff --git a/1_Documentacion/Experimentos/cifrado_archivos.md b/1_Documentacion/Experimentos/cifrado_archivos.md
+new file mode 100644
+index 0000000..1e35fbe
+--- /dev/null
++++ b/1_Documentacion/Experimentos/cifrado_archivos.md
+@@ -0,0 +1,36 @@
++# Cifrado de archivos con las S-boxes finales (Fase 5b)
++
++## experimentos/generar_muestras.py
++
++Genera de forma determinista los archivos de `ejemplos/`:
++
++| Archivo | Contenido | Tamaño |
++|---|---|---|
++| `texto.txt` | Texto en español con acentos y símbolos | 769 B |
++| `imagen.png` | PNG RGB de 256×256, construido a mano (chunks y CRC) | 3222 B |
++| `ejecutable_minimo` | ELF x86-64 mínimo que termina con código 0 | 129 B |
++| `vacio.bin` | Archivo vacío | 0 B |
++
++Además, cada corrida de `cifrar_archivos.py` genera 1 MiB de bytes aleatorios con semilla fija (no se guarda en el repo).
++
++## experimentos/cifrar_archivos.py
++
++1. **Elige la mejor S-box de cada variante** con una regla fijada antes de ver resultados: mayor fitness; en empate, menor δ; en empate, menor semilla. Suma AES como referencia.
++2. **Cifra y descifra** cada archivo con `src/cifrado.py` (3 S-boxes × 5 archivos = 15 combinaciones).
++3. **Comprueba**, por combinación: SHA-256 del recuperado = SHA-256 del original; el cifrado es distinto del original (salvo el vacío); el ejecutable recuperado corre y termina con código 0 (solo en Linux; en otros sistemas queda `n/a`).
++4. **Escribe** `resultados/cifrado/cifrado_archivos.csv` y `comparacion_sboxes.csv`, y sale con error si alguna combinación falla.
++
++## Resultado
++
++| S-box | Semilla | NL | δ | Fitness |
++|---|---|---|---|---|
++| Mejor estática | 1008 | 100 | 8 | 92.0 |
++| Mejor adaptativa | 1036 | 100 | 8 | 92.0 |
++| AES | – | 112 | 4 | 112.0 |
++
++15/15 combinaciones recuperan el archivo idéntico.
++
++## Lo que esto demuestra y lo que no
++
++- Sí: las S-boxes del AG son biyectivas, reversibles y utilizables como componente de sustitución sobre archivos binarios reales.
++- No: que protejan datos. La sustitución byte a byte conserva las frecuencias y no es segura por sí sola. Las "mejores" S-boxes son el máximo de 100 corridas, no una S-box típica.
+diff --git a/1_Documentacion/Experimentos/contraste.md b/1_Documentacion/Experimentos/contraste.md
+new file mode 100644
+index 0000000..8a6b504
+--- /dev/null
++++ b/1_Documentacion/Experimentos/contraste.md
+@@ -0,0 +1,29 @@
++# Verificación cruzada con sboxU (Módulo 4)
++
++**Para qué existe:** cumplir el criterio del protocolo de "cero discrepancias" entre el evaluador propio y una herramienta pública (OE6).
++
++## Tres implementaciones
++
++| Métrica | `src/evaluador.py` | `src/verificacion.py` | sboxU 2.0 |
++|---|---|---|---|
++| δ | DDT vectorizada con NumPy | Conteo directo en Python puro | `differential_uniformity` |
++| NL | Walsh por multiplicación matricial | FWHT por función componente | `128 − linearity / 2` |
++
++## experimentos/contraste_sboxu.py
++
++- Contrasta AES y 50 permutaciones aleatorias (semilla 0).
++- Resultado en Colab con Sage: **51/51 coinciden**.
++
++## experimentos/contraste_final.py
++
++- Lee `resultados/<dir>/sboxes/*.json` y recalcula NL, δ y fitness de cada S-box final con las tres implementaciones; los compara con lo guardado en la corrida.
++- Si sboxU no está disponible, avisa y hace solo el contraste interno; el modo de verificación final se detiene con error para no dar por bueno un contraste parcial.
++- Resultado: **200/200 coinciden** (100 estáticas + 100 adaptativas).
++
++## Cómo se instala sboxU
++
++`notebooks/colab_verificacion_sboxu.ipynb`: micromamba con Sage de conda-forge en un entorno aparte, luego `python -m pip install --no-build-isolation` de sboxU con el Python de ese entorno. Ahí corre `pytest` (con `test_sboxu.py` ya sin saltarse) y los dos contrastes. La evidencia está en `evidencia/colab_2026-11-14/`.
++
++## Reproducibilidad entre máquinas
++
++En el mismo notebook se recalcularon 3 semillas (1000 a 1002) × 3 variantes en Colab con la configuración congelada: 15/15 archivos idénticos byte a byte a los de la laptop.
+diff --git a/1_Documentacion/Experimentos/correr_todo.md b/1_Documentacion/Experimentos/correr_todo.md
+new file mode 100644
+index 0000000..5817b10
+--- /dev/null
++++ b/1_Documentacion/Experimentos/correr_todo.md
+@@ -0,0 +1,35 @@
++# experimentos/correr_todo.py y baseline_aleatoria.py (Fase 5a)
++
++## correr_todo.py: las corridas finales
++
++**Qué hace:** corre las tres variantes (estática, adaptativa, aleatoria) con las 100 semillas finales: 300 corridas, en paralelo.
++
++**Garantías:**
++- **Reanudable:** un CSV terminado es la marca de "corrida hecha"; si se interrumpe, se vuelve a lanzar el mismo comando.
++- **Escritura atómica:** cada CSV se escribe como `.tmp` y se renombra al final (`os.replace`); los `.tmp` huérfanos se borran al reanudar.
++- **Configuración congelada:** se niega a correr si `config.py` no coincide con `CFG_CONGELADA` o si el directorio tiene corridas de otra configuración.
++- **Trazabilidad:** guarda `meta.json` (configuración, semillas, commit, fechas, versión de Python) y `entorno.txt` (`pip freeze`).
++- Guarda la mejor S-box de cada corrida del AG en `sboxes/<variante>_<semilla>.json` (con NL, δ y fitness).
++- Fija un hilo de BLAS por proceso: el paralelismo lo da el `Pool`.
++
++**Modos:**
++
++| Comando | Qué corre | Directorio |
++|---|---|---|
++| `python -m experimentos.correr_todo` | 3 variantes × semillas 1000 a 1099 | `resultados/final` |
++| `... --smoke` | Prueba rápida (N = 20, G = 10, 3 semillas); no es resultado | `resultados/smoke` |
++| `... --suplementario` | Exploratorio: G = 300, semillas 1000 a 1039 | `resultados/suplementario_G300` |
++| `... --workers 4` | Limita el número de procesos | — |
++
++El diseño del suplementario (`SUPLEMENTARIO = dict(G=300, n_semillas=40)`) se declaró antes de correrlo y solo cambia G y el número de semillas.
++
++## baseline_aleatoria.py: la referencia de sanidad
++
++- Evalúa N × (G + 1) permutaciones al azar, agrupadas en G + 1 "generaciones" de N, y registra el mejor acumulado con el mismo esquema de CSV que el AG.
++- Con la misma semilla, sus primeras N permutaciones son idénticas a la población inicial del AG, así que comparten punto de partida.
++- Recibe un presupuesto igual o mayor que el AG (el AG no reevalúa al élite ni a los descendientes sin cambios).
++- Es una referencia (atributo 7 del estándar ACM SIGSOFT), no una tercera hipótesis.
++
++## analisis/comprobaciones.py
++
++Comprueba que las primeras 100 generaciones de las corridas con G = 300 sean idénticas a las corridas finales, y que las 40 semillas den los mismos promedios a G = 100 que las 100 semillas.
+diff --git a/1_Documentacion/INDICE.md b/1_Documentacion/INDICE.md
+index 566bc29..a3b3e0a 100644
+--- a/1_Documentacion/INDICE.md
++++ b/1_Documentacion/INDICE.md
+@@ -1,109 +1,60 @@
+-# Explicacion de la estructura y archivos
++# Documentación de sbox-ga
+ 
+-## La idea general
+-
+-- Una S-box es una tabla de 256 números que “revuelve” bytes (cada número del 0 al 255 se cambia por otro, sin repetir). Es la pieza que hace difícil descifrar un mensaje sin la clave.
+-
+-- Hay dos medidas de qué tan buena es: NL (más alta = mejor) y δ (más baja = mejor). La S-box de AES tiene NL = 112 y δ = 4, y es la referencia.
+-
+-- Como hay un número absurdo de tablas posibles, no se pueden probar todas. Se usa un algoritmo genético: una población de tablas que “evoluciona” (las mejores se reproducen, se mezclan y mutan). El proyecto compara una versión que no cambia sus reglas con otra que sí las ajusta mientras corre.
+-
+-## `src/`: las piezas del programa
+-
+-### `gf256.py`: “la calculadora especial”
+-
+-- **Qué es**: las matemáticas del campo GF(2⁸), que es un sistema donde sumar y multiplicar números de 0 a 255 siempre da otro número de 0 a 255.
+-
+-- **Qué hace**: multiplica, saca inversos y, con eso, construye la S-box de AES desde cero.
+-
+-- **Para qué sirve**: para tener una tabla de la que sabemos la respuesta correcta (NL = 112, δ = 4) y verificar que nuestro “juez” funciona.
+-
+-- **Analogía**: es como fabricar una regla de 1 metro perfecta para comprobar que tu cinta métrica mide bien.
+-
+-### `evaluador.py`: “el juez”
+-
+-- **Qué es**: el programa que califica cualquier S-box.
+-
+-- **Entra**: una lista de 256 números. Sale: NL, δ y un fitness (una calificación única).
+-
+-- **Cómo lo hace:**
+-    - `ddt` y `delta`: cuentan qué tan “predecible” es la tabla (si un cambio en la entrada produce siempre el mismo cambio en la salida, es mala).
+-    - `walsh` y `nl`: miden qué tan parecida es la tabla a una operación simple y lineal (si se parece mucho, es mala).
+-    - `fitness`: junta ambas en un número: `NL − 2 × (δ − 4)`.
+-    - `es_permutacion`: revisa que no haya números repetidos ni faltantes.
+-
+-- **Analogía**: un juez de concurso que da una calificación final combinando dos criterios.
+-
+-- **Detalle**: está escrito con NumPy para calificar rápido, porque el algoritmo lo llama miles de veces.
+-
+-### `verificacion.py`: “el segundo juez”
+-
+-- **Qué es**: calcula NL y δ otra vez, pero con un método distinto y más lento.
+-
+-- **Para qué sirve**: si los dos jueces dan siempre lo mismo, es muy probable que ninguno tenga errores.
+-
+-- **Analogía**: sacar una cuenta con calculadora y luego a mano, para confirmar.
+-
+-### `motor_ga.py`: “el criadero”
+-
+-- **Qué es**: el algoritmo genético completo. Es el archivo principal.
+-
+-- **Qué hace en cada corrida**:
+-    1. Crea 30 S-boxes al azar (la población inicial).
+-    2. Las califica con el juez.
+-    3. Selecciona las mejores (torneo: elige 3 al azar y gana la mejor).
+-    4. Las cruza (mezcla dos tablas sin repetir números, con PMX).
+-    5. Las muta (intercambia algunos números de lugar).
+-    6. Guarda al mejor siempre (elitismo), para no perderlo.
+-    7. Repite 50 veces y escribe todo en un archivo CSV.
++Explicación de la estructura y de cada archivo del repositorio, al día con el código de la Fase 5b (configuración congelada `congelado-v1`). El README tiene el método, la bitácora y los resultados; aquí se explica **qué hace cada pieza y cómo se conecta con las demás**.
+ 
+-- **Funciones auxiliares**:
+-    - `diversidad`: mide qué tan distintas son las tablas entre sí (si todas se parecen, la búsqueda se estancó).
+-    - `actualizar_parametros`: la parte adaptativa. Si la búsqueda se estanca, sube la probabilidad de mutar.
+-
+-- **Analogía**: un criadero de plantas donde cada generación dejas reproducirse a las mejores. La versión estática siempre usa la misma receta, y la adaptativa cambia la receta si ve que ya no avanza.
+-
+-## `experimentos/`: los controles y las corridas
+-
+-### `config.py`: “el panel de perillas”
+-
+-- **Qué es**: un solo lugar con todos los ajustes (tamaño de población, generaciones, probabilidades de cruce y mutación, etc.) y las listas de semillas.
+-
+-- **Para qué sirve**: que ambas variantes usen exactamente los mismos ajustes, para que la única diferencia sea la adaptación.
+-
+-- **Las semillas**: son números que fijan el azar. Con la misma semilla, el programa da siempre el mismo resultado. Se separan en preliminares (1 a 5, para probar) y finales (1000 a 1029, para el experimento real).
+-
+-### `prelim_estatica.py`: “la prueba de arranque”
+-
+-- Corre la versión estática con las 5 semillas de prueba y cronometra cada una.
+-
+-- Sirve para ver si el criadero funciona y dónde se atora.
+-
+-### `calibracion.py`: “probar las perillas”
+-
+-- Corre la versión adaptativa con 12 combinaciones de ajustes y 2 controles estáticos, y muestra una línea de resultado por cada una.
+-
+-- Sirve para decidir qué ajustes usar antes del experimento real. Se hace con semillas de prueba para no “hacer trampa” con las finales.
+-
+-## `analisis/`: para mirar los resultados
+-
+-### `ejemplo_4x4.py`: “el ejemplo de juguete”
+-
+-- Calcula la tabla de diferencias de una S-box diminuta (4 bits, la de PRESENT) para que se vea a ojo lo que el evaluador hace en grande. No forma parte del experimento.
+-
+-### `graficas_prelim.py`: “los dibujos”
+-
+-- Lee los CSV y dibuja 4 gráficas (fitness, NL, δ, diversidad contra generación), una línea por semilla. Sirve para ver el estancamiento.
+-
+-### `resumen_prelim.py`: “los números clave”
+-
+-- Imprime, para cada semilla, cómo iba en las generaciones 0, 10, 25 y 50. Es la versión en texto de las gráficas.
+-
+-## `tests/`: las pruebas automáticas
+-
+-Son programas que revisan que todo lo demás siga funcionando. Se ejecutan con `python -m pytest -q`.
++## La idea general
+ 
+-- `test_gf256.py`: comprueba que la calculadora dé resultados conocidos (por ejemplo, que la S-box de AES empiece con 0x63).
+-- `test_evaluador.py`: comprueba que el juez dé 112 y 4 para AES, que ambos jueces coincidan y que una tabla trivial (x → x) saque la peor nota.
+-- `test_motor.py`: comprueba que las tablas que produce el criadero sigan siendo válidas, que la misma semilla dé el mismo resultado y que la versión adaptativa corra sin fallar.
+-- `medir_velocidad.py`: no es una prueba, es un cronómetro. Mide cuánto tarda una calificación para estimar cuánto durará el experimento completo.
+\ No newline at end of file
++- Una S-box de 8×8 es una tabla de 256 números (una permutación de 0 a 255) que "revuelve" bytes. Es la única pieza no lineal de un cifrado como AES.
++- Su calidad se mide con dos números: **NL** (no-linealidad, más alta es mejor) y **δ** (uniformidad diferencial, más baja es mejor). La S-box de AES tiene NL = 112 y δ = 4 y se usa como cota de referencia.
++- Hay 256! tablas posibles, así que no se pueden probar todas. Se usa un **algoritmo genético de permutación**: una población de S-boxes que se seleccionan, cruzan y mutan según un fitness `NL − 2·(δ − 4)`.
++- Se comparan dos variantes que comparten todo el código salvo una cosa: la **estática** usa parámetros fijos y la **adaptativa** cambia mutpb, indpb y el tamaño de torneo según el estancamiento de NL y δ y la diversidad de la población. Una **búsqueda aleatoria** con el mismo presupuesto sirve como piso de sanidad.
++
++## Flujo de datos
++
++```
++config.py ──► motor_ga.py ──► resultados/final/<variante>_<semilla>.csv  ──► analisis/estadistica.py ──► tablas y gráficas
++                 │                               │
++           evaluador.py                    sboxes/*.json ──► contraste_final.py (evaluador, verificacion, sboxU)
++           (NL, δ, fitness)                       └──────────► cifrar_archivos.py ──► resultados/cifrado/
++```
++
++## Mapa de esta carpeta
++
++| Archivo | Qué explica |
++|---|---|
++| `Principal/gf256.md` | Módulo 1: aritmética de GF(2⁸) y S-box de AES |
++| `Principal/evaluador.md` | Módulo 2: DDT, espectro de Walsh, NL, δ, fitness y modelo de atacante |
++| `Principal/verificacion.md` | Módulo 4: segunda implementación y puente con sboxU |
++| `Principal/motor_ga.md` | Módulo 3: AG estático y adaptativo |
++| `Principal/cifrado.md` | Módulo 5: sustitución byte a byte (demostrativo) |
++| `Principal/config.md` | Parámetros congelados y semillas |
++| `Experimentos/calibracion.md` | Fases 3 y 4: calibración de N y G, de la estática y de la adaptativa |
++| `Experimentos/correr_todo.md` | Fase 5a: corridas finales y experimento suplementario |
++| `Experimentos/contraste.md` | Verificación cruzada con sboxU |
++| `Experimentos/cifrado_archivos.md` | Fase 5b: cifrado de archivos reales |
++| `Analisis/estadistica.md` | Módulo 6: pruebas estadísticas, tablas y gráficas |
++| `Resultados/columnas_csv.md` | Qué significa cada columna de los CSV de corridas |
++| `Resultados/Prelim/estatica_1.md` | Histórico: CSV de la Fase 2 (N = 30, G = 50), ya no vigente |
++| `Test/pruebas.md` | Qué cubre cada archivo de pruebas |
++| `Referencias/literatura_nl_delta.md` | Valores de NL y δ reportados en la literatura, para la discusión |
++
++## Correspondencia con el protocolo
++
++| Protocolo | Código |
++|---|---|
++| Módulo 1, Álgebra de GF(2⁸) (OE3) | `src/gf256.py` |
++| Módulo 2, Evaluador criptográfico (OE3) | `src/evaluador.py` |
++| Módulo 3, Motor evolutivo (OE4) | `src/motor_ga.py` |
++| Módulo 4, Verificación cruzada (OE6) | `src/verificacion.py`, `experimentos/contraste_sboxu.py`, `experimentos/contraste_final.py` |
++| Módulo 5, Cifrado de archivos binarios (OE6) | `src/cifrado.py`, `experimentos/cifrar_archivos.py` |
++| Módulo 6, Análisis experimental (OE5) | `analisis/estadistica.py` |
++
++## Archivos históricos
++
++Siguen en el repositorio para trazabilidad, pero pertenecen a la Fase 2 y usan la configuración vieja:
++
++- `experimentos/prelim_estatica.py`, `experimentos/calibracion.py`
++- `analisis/graficas_prelim.py`, `analisis/resumen_prelim.py`, `analisis/prelim_estatica.png`
++- `resultados/archivo_v1/`
++
++`analisis/comprobaciones.py` comprueba que las primeras 100 generaciones del experimento suplementario (G = 300) sean idénticas a las corridas finales.
+diff --git a/1_Documentacion/Principal/cifrado.md b/1_Documentacion/Principal/cifrado.md
+new file mode 100644
+index 0000000..a41b8f5
+--- /dev/null
++++ b/1_Documentacion/Principal/cifrado.md
+@@ -0,0 +1,21 @@
++# src/cifrado.py (Módulo 5: sustitución byte a byte)
++
++**Para qué existe:** mostrar que una S-box obtenida por el AG se puede usar como componente de sustitución sobre archivos binarios reales y que el proceso es reversible (OE6).
++
++> **No es un cifrado seguro.** Es una sustitución monoalfabética: cada byte siempre se cambia por el mismo byte, así que conserva las frecuencias del archivo y un análisis de frecuencias la rompe sin conocer la S-box. Es solo demostrativo.
++
++## Funciones
++
++| Función | Qué hace |
++|---|---|
++| `_validar(sbox)` | Lanza `ValueError` si la S-box no es una permutación de 0 … 255; devuelve la tabla como `bytes`. |
++| `inversa(sbox)` | Construye `S⁻¹` tal que `S⁻¹[S[x]] = x`. |
++| `cifrar(datos, sbox)` / `descifrar(datos, sbox)` | `bytes.translate` con la tabla o con su inversa. |
++| `sha256(datos)` | Hash hexadecimal con `hashlib`, para comprobar la recuperación exacta. |
++| `cifrar_archivo` / `descifrar_archivo` | Igual, pero por bloques de 1 MiB, para archivos grandes. |
++
++## Cómo se verifica (`tests/test_cifrado.py`)
++
++Ida y vuelta con SHA-256 idéntico (texto, vacío, binario aleatorio de 3 MB), que el cifrado sí cambie los datos, valores conocidos con la S-box de AES, que la inversa sea inversa y que rechace S-boxes inválidas.
++
++El uso con las S-boxes finales está en `Experimentos/cifrado_archivos.md`.
+diff --git a/1_Documentacion/Principal/config.md b/1_Documentacion/Principal/config.md
+index 1f01cda..c166f3a 100644
+--- a/1_Documentacion/Principal/config.md
++++ b/1_Documentacion/Principal/config.md
+@@ -1,15 +1,36 @@
+-# config.py (parametros compartidos)
++# experimentos/config.py (parámetros congelados)
+ 
+-Un diccionario `CFG` que ambas variantes leen, para garantizar que solo difiera el lazo de control:
++**Para qué existe:** un solo lugar con todos los parámetros, compartido por ambas variantes, para que la única diferencia entre ellas sea el lazo de control. Está congelado desde la etiqueta `congelado-v1`; `correr_todo.py` se niega a correr si no coincide con `CFG_CONGELADA`.
+ 
+-| Parámetro         | Qué es
+-| ---               | ---
+-| `N=30`, `G=50`    | población y generaciones (fijos por H1)
+-| `cxpb=0.9`	    | probabilidad de que una pareja de padres se crucen
+-| `mutpb=0.2`	    | probabilidad de que un individuo mute (base; en la adaptativa es el piso)
+-| `indpb=0.02`      | dentro de un individuo que muta, probabilidad de intercambiar cada posición (~5 de 256 posiciones)
+-| `k=3`	            | tamaño del torneo (presión de selección)
+-| `ventana`, `div_min`, `factor`, `mutpb_max` | solo adaptativa: cuántas generaciones sin mejora = estancamiento, umbral de diversidad, cuánto se multiplica mutpb, y su tope
++## Parámetros comunes
+ 
++| Clave | Valor | Origen |
++|---|---|---|
++| `N` | 100 | Calibración de N y G (Fase 3) |
++| `G` | 100 | Calibración de N y G (Fase 3) |
++| `cxpb` | 0.9 | Fijo; no se adapta |
++| `mutpb` | 0.4 | Rejilla de la estática (Fase 3) |
++| `indpb` | 0.02 | Rejilla de la estática (Fase 3) |
++| `k` | 5 | Rejilla de la estática (Fase 3) |
++| `lam` | 2.0 | **Fijo** antes de calibrar (riesgo R7) |
+ 
+-`SEMILLAS_FINALES` (1000-1029) y `SEMILLAS_PRELIM` (1-5) están separadas a propósito: supuesto 5, para que la calibración no contamine la evidencia de H1.
+\ No newline at end of file
++## Solo variante adaptativa
++
++| Clave | Valor | Origen |
++|---|---|---|
++| `k_explorar` | 3 | Fijo antes de calibrar |
++| `mutpb_max` | 0.8 | Fijo antes de calibrar |
++| `indpb_max` | 0.1 | Fijo antes de calibrar |
++| `div_rec` | 0.6 | Fijo antes de calibrar |
++| `ventana` | 20 | Rejilla de la adaptativa (Fase 4) |
++| `div_min` | 0.05 | Rejilla de la adaptativa (Fase 4) |
++| `factor` | 2.0 | Rejilla de la adaptativa (Fase 4) |
++
++## Semillas
++
++- `SEMILLAS_PRELIM = 1 … 20`: solo para calibrar. Nunca se usan en el análisis final.
++- `SEMILLAS_FINALES = 1000 … 1099`: n = 100 por variante, las mismas para estática, adaptativa y aleatoria, así que las tres parten de la misma población inicial.
++
++## Diferencias con el protocolo V4
++
++El protocolo planteaba N = 30, G = 50 y 30 semillas por variante. Se ampliaron tras la calibración (N y G) y para tener más potencia estadística (n = 100 detecta d ≈ 0.36 unilateral con 80 % de potencia, contra d ≈ 0.66 con n = 30).
+diff --git a/1_Documentacion/Principal/evaluador.md b/1_Documentacion/Principal/evaluador.md
+index 9b3b6fb..086c8b9 100644
+--- a/1_Documentacion/Principal/evaluador.md
++++ b/1_Documentacion/Principal/evaluador.md
+@@ -1,35 +1,36 @@
+-# evaluador.py (El juez criptografico)
++# src/evaluador.py (Módulo 2: evaluador criptográfico)
+ 
+-Dada una s-box (lista de 256 valores), calcula DDT, espectro de Walsh, NL, δ y fitness. Es lo que el AG llama miles de veces, por eso esta vectorizado con NumpyPy.
+-
+-**Constantes precalculadas (se hacen una sola vez al importar)**
+-
+-- `_X = np.arange(256)`: vector 0..255
+-- `_PAR`: tabla de paridad; `_PAR[i]` = 1 si `i` tiene cantidad impar de unos, 0 si par. Sirve para calcular el producto punto binario `ax` (que es la paridadde `a & x`)
+-- `_H`: matriz de Hadamard 256x256 con `H[a, x] = (-1)^(ax)`. `np.bitwise_and.outer(_X, _X)` hace `a & x` para todas las parejas; se calcula la paridad y se convierte a ±1 con `1 - 2*paridad` 
+-- `_FILAS = (arange(256)*256)[:, None]`: offsets por fila, un truco para el `bincount` de la DDT (abajo)
++**Para qué existe:** calificar cualquier S-box. El AG lo llama una vez por cada individuo nuevo (≈ 10,000 veces por corrida), por eso está vectorizado con NumPy.
+ 
+ ## Funciones
+ 
+-`es_permutacion(sbox)`: Ordena los valores y verifica que sean exactamente 0..255. Es el chequeo de biyectividad.
+-
+-**`ddt(sbox)`: tabla de distribución de diferencias -** `T[dx, dy]` = cuántos `x` cumplen `S(x) ⊕ S(x⊕dx) = dy`
+-
+-- `s[_X[None,:] ^ _X[:,None]]`: calcula S(x ⊕ dx) para todas las parejas (dx, x) de golpe, gracias al broadcasting
+-- `dy = s[None,:] ^ ...`: le hace XOR con `S(x)`. Queda una matriz `dy[dx, x]`
+-- Luego hay que contar, por cada fila `dx`, cuántas veces aparece cada `dy`. El truco: sumar `_FILAS` (dx·256) a cada `dy` convierte cada pareja (dx, dy) en un índice único de 0..65535, y un solo `np.bincount` cuenta todo. `reshape(256,256)` lo regresa a tabla
+-- Propiedad que pruebas: cada fila suma 256.
++| Función | Entrada → salida | Cómo |
++|---|---|---|
++| `es_permutacion(sbox)` | lista → bool | Comprueba que contenga 0 … 255 sin repetir. |
++| `ddt(sbox)` | → matriz 256×256 | `T[dx, dy]` = número de x con `S(x) ⊕ S(x ⊕ dx) = dy`. Se arma toda la matriz `S(x) ⊕ S(x ⊕ dx)` de una vez y se cuenta con `np.bincount`. |
++| `delta(sbox)` | → int | Máximo de la DDT sin la fila `dx = 0` (que siempre vale 256 en `dy = 0`). |
++| `walsh(sbox)` | → matriz 256×256 | Espectro `W[a, b] = Σₓ (−1)^(a·x ⊕ b·S(x))`, calculado como producto de la matriz de Hadamard `H[a, x]` por `F[x, b]`. La LAT es `W / 2`. |
++| `nl(sbox)` | → int | `128 − max|W[a, b]| / 2` con `b ≠ 0` (la columna `b = 0` no es una función componente). |
++| `metricas(sbox)` | → (NL, δ) | Calcula ambas una sola vez; es la que usa el motor. |
++| `fitness_de(nl, δ, lam)` | → float | `NL − lam·(δ − 4)`. Con `lam = 2`, AES da 112. |
++| `fitness(sbox, lam)` | → float | Atajo: `fitness_de(*metricas(sbox))`. |
++| `sesgo_lineal(nl)` | → float | Sesgo del mejor ataque lineal: `(128 − NL) / 256`. AES: 0.0625. |
++| `prob_diferencial(δ)` | → float | Probabilidad del mejor ataque diferencial: `δ / 256`. AES: 0.0156. |
+ 
+-**`delta(sbox)`: uniformidad diferencial -** `ddt(sbox)[1:].max()`: el máximo de la DDT excluyendo la fila 0 `(dx = 0)`, porque ahí siempre vale 256 (diferencia de entrada cero da diferencia de salida cero). Menor δ = mejor resistencia diferencial. AES: 4
++## Por qué el fitness es `NL − 2(δ − 4)`
+ 
+-**`walsh(sbox)`: espectro de Walsh -** `W[a,b] = Σₓ (-1)^(a·x ⊕ b·S(x))`
++- Es mono-objetivo y agregado (decisión metodológica del protocolo, sección 2.2).
++- Restar 4 hace que AES quede como cota natural (fitness = NL = 112 cuando δ = 4).
++- `lam = 2` está **fijo** desde antes de calibrar (riesgo R7). Con eso, bajar δ en 2 vale lo mismo que subir NL en 4. Como NL y δ casi siempre son pares, el fitness toma pocos valores distintos (muchos empates en las pruebas estadísticas).
+ 
+-- `F[x,b] = (-1)^(b·S(x))`: construye la matriz de las funciones componente
+-- `_H @ F`: una multiplicación matricial calcula la suma para todos los (a, b) a la vez
+-- `np.rint(...).astype(int64)`: redondea (los floats pueden traer error de 1e-13) a enteros exactos
++## Modelo de atacante
+ 
+-**`nl(sbox)`: no-linealidad -** `128 − max|W(a,b)| / 2`, con `b ≠ 0` (por eso `W[:, 1:]`; b=0 sería la función constante). Intuición: mientras más grande sea el sesgo lineal máximo, más cerca está la S-box de una función afín y menor NL. AES: 112
++NL y δ son, respectivamente, la fuerza del mejor ataque lineal y del mejor ataque diferencial contra la S-box sola. `sesgo_lineal` y `prob_diferencial` los expresan en la escala del atacante. La variante adaptativa reacciona al estancamiento de estas dos señales; la estática no. No se implementa un ataque criptoanalítico real.
+ 
+-`LAMBDA = 2.0`: Peso con que δ penaliza (Provisional)
++## Cómo se verifica (`tests/test_evaluador.py`)
+ 
+-`fitness(sbox, lam)`: `NL − λ·(δ − 4)`. Un δ de 4 no penaliza nada (es el de AES); cada unidad extra de δ resta 2 puntos. Con resultados preliminares (NL = 98, δ = 10): 98 − 2·6 = 86.0
+\ No newline at end of file
++- Regresión: AES da NL = 112, δ = 4, fitness = 112, sesgo 0.0625, probabilidad 0.0156.
++- La identidad (x → x) es lineal: NL = 0, δ = 256.
++- Cada fila de la DDT suma 256.
++- Coincide con `verificacion.py` en AES y en permutaciones aleatorias.
++- `sesgo_lineal` coincide con el máximo del espectro de Walsh calculado aparte.
+diff --git a/1_Documentacion/Principal/gf256.md b/1_Documentacion/Principal/gf256.md
+index a538f78..90e2cef 100644
+--- a/1_Documentacion/Principal/gf256.md
++++ b/1_Documentacion/Principal/gf256.md
+@@ -1,28 +1,22 @@
+-# gf256.py (Algebra de GF(2⁸))
++# src/gf256.py (Módulo 1: álgebra de GF(2⁸))
+ 
+-El archivo `gf256.py` construye la S-box de AES desde cero con matematicas, para tener una referencia confiable (NL = 112, δ = 4) contra la cual calibrar el evaluador.
++**Para qué existe:** construir la S-box de AES desde cero, con la que se comprueba que el evaluador mide bien (regresión NL = 112, δ = 4). El AG no usa este módulo.
+ 
+-### POLY = 0x11B
++## Funciones
+ 
+-Es el polinomio irreducible **x⁸+x⁴+x³+x+1** escrito en binario (1 0001 1011). En GF(2⁸), cuando una multiplicacion "se pasa" de 8 bits, se reduce modulo este polinomio.
++| Función | Qué hace |
++|---|---|
++| `gf_mul(a, b)` | Multiplica en GF(2⁸) con el algoritmo "shift-and-add": suma (XOR) `a` cuando el bit de `b` es 1, desplaza `a` a la izquierda y, si se desborda el bit 8, reduce con el polinomio `POLY = 0x11B` (x⁸ + x⁴ + x³ + x + 1). |
++| `gf_inv(a)` | Inverso multiplicativo por búsqueda directa (b tal que a·b = 1). Por convención de AES, `inv(0) = 0`. |
++| `affine(x)` | Transformación afín de AES: `x ⊕ rotl(x,1) ⊕ rotl(x,2) ⊕ rotl(x,3) ⊕ rotl(x,4) ⊕ 0x63`. |
++| `aes_sbox()` | `affine(gf_inv(x))` para x = 0 … 255. Devuelve la S-box de AES como lista. |
+ 
+-### gf_mul(a, b): multiplicacion en GF(2⁸)
++## Cómo se verifica (`tests/test_gf256.py`)
+ 
+-Es el algoritmo "suma y desplaza" (como multiplicar a mano en binario, pero la suma es XOR):
++- Valores conocidos de FIPS-197: `S[0x00] = 0x63`, `S[0x01] = 0x7C`, `S[0x53] = 0xED`.
++- Ejemplo de FIPS-197: `{57}·{83} = {c1}`.
++- La S-box es una permutación y `a·inv(a) = 1` para todo a ≠ 0.
+ 
+-- `r = 0`: acumulador del resultado
+-- `while b`: recorre los bits de `b` de derecha a izquierda
+-- `if b & 1: r ^= a`: si el bit actual de `b` es 1, suna (XOR) `a` al resultado
+-- `a <<= 1`: duplica `a` (multiplicar por x).
+-- `if a & 0x100: a ^= POLY`: si `a` se salio de 8 bits, lo reduce con el polinomio. Asi siempre queda en 0..255
+-- `b >>= 1`: pasa al siguiente bit
++## Notas
+ 
+-**Ejemplo del FIPS-197 que se utiliza en la pruebas: {57}·{83} = {c1}.**
+-
+-**`gf_inv(a)`: inverso multiplicativo -** Busca por fuerza bruta el `b` tal que `ab = 1`. Para `a = 0` devuelve 0 (convencion de AES, porque el 0 no tiene inverso). Es lento (hasta 255 multiplicaciones), pero solo se usa una vez para construir la S-box de AES, asi que no importa.
+-
+-**`_rotl8(x, n)`: rotacion circular de 8 bits a la izquierda -** Desplaza `x` a la izquierda `n` posiciones y los bits que se salen reentran por la derecha. El `& 0xFF` recorta a 8 bits.
+-
+-**`affine(x)`: transformacion afin de AES -** Es `x ⊕ rotl(x,1) ⊕ rotl(x,2) ⊕ rotl(x,3) ⊕ rotl(x,4) ⊕ 0x63`. Es la forma compacta de la multiplicacion matricial que define el estandar. Su papel es romper la estructura algebraica del inverso puro. 
+-
+-**`aes_sbox()` -** Para cada byte `x` de 0 a 255: `affine(gf_inv(x))`. Eso es literalmente la definicion de la s-box de AES (inverso + afin). Devuelve una lista de 256 enteros, o sea, una permutacion: justo la representacion π que se usa en todo el proyecto.
+\ No newline at end of file
++- `gf_inv` es O(256) por llamada; no importa porque solo se usa una vez para construir AES.
+diff --git a/1_Documentacion/Principal/motor_ga.md b/1_Documentacion/Principal/motor_ga.md
+index f1f9bea..5a90227 100644
+--- a/1_Documentacion/Principal/motor_ga.md
++++ b/1_Documentacion/Principal/motor_ga.md
+@@ -1,41 +1,61 @@
+-# motor_ga.py (el corazón)
++# src/motor_ga.py (Módulo 3: motor evolutivo)
+ 
+-### Preámbulo
++**Para qué existe:** ejecutar una corrida completa del AG de permutación, en su variante estática o adaptativa, y escribir un CSV con una fila por generación. Usa DEAP para los operadores.
+ 
+-- `creator.create("FitnessMax", ..., weights=(1.0,))`: fitness a maximizar, un solo objetivo. Individual es una lista con ese fitness. El if not hasattr evita error si el módulo se importa dos veces.
+-- `_evaluar(ind)`: DEAP exige que el fitness sea una tupla, por eso (fitness(ind),).
++## Preámbulo
+ 
+-### diversidad(pop, rng)
++- `creator.create("FitnessMax", ..., weights=(1.0,))`: un solo objetivo, a maximizar. `Individual` es una lista con ese fitness. El `if not hasattr` evita un error si el módulo se importa dos veces.
++- `N_PARES_DIV = 100`: pares muestreados para estimar la diversidad.
+ 
+-Toma 100 pares al azar de la población y calcula, para cada par, la fracción de posiciones (de 256) donde difieren (distancia de Hamming normalizada). Promedia. 0 = clones; ~1 = totalmente distintos (dos permutaciones aleatorias difieren en casi todas las posiciones, por eso la gen. 0 da ≈1.0). Usa su propio rng para que medir la diversidad no consuma números aleatorios de la evolución: así la estática y la adaptativa siguen idénticas hasta que el lazo intervenga.
++## Funciones
+ 
+-### actualizar_parametros(mutpb, sin_mejora, div, cfg)
++### `_evaluar(ind, lam)`
++Calcula NL y δ **una sola vez** con `metricas`, los guarda en el individuo (`ind.nl`, `ind.delta`) y fija `ind.fitness.values = (fitness,)` (DEAP exige tupla).
+ 
+-El lazo adaptativo (placeholder). Si hay estancamiento (sin_mejora >= ventana) o poca diversidad (div < div_min), sube mutpb multiplicándolo por factor (con tope mutpb_max). Si no, lo baja dividiendo por factor (con piso en el mutpb base).
++### `diversidad(pop, rng)`
++Distancia de Hamming media normalizada entre 100 pares al azar: para cada par, la fracción de las 256 posiciones en que difieren. 0 = clones; ≈ 1 = totalmente distintos (dos permutaciones aleatorias difieren en casi todas las posiciones). Usa **su propio generador** (`semilla + 7919`), para que medir la diversidad no consuma números aleatorios de la evolución.
+ 
+-Ojo, esto conecta con tu hallazgo de calibración: con div_min = 0.5 y la diversidad cayendo rápido, la condición casi siempre se cumple, mutpb se queda pegado al tope y la adaptativa se vuelve una estática con mutpb ≈ 0.8. Por eso dices que hay que rediseñar el lazo.
++### `explorando(p, cfg)`
++La adaptativa está en modo explorar si su torneo vigente es `k_explorar` (y `k_explorar ≠ k`).
+ 
+-### correr(semilla, adaptativo, cfg, ruta_csv): una corrida completa
++### `actualizar_parametros(p, ind, cfg)` (la regla adaptativa)
++Función pura: recibe los parámetros vigentes `p = {mutpb, indpb, k}` y los indicadores `ind = {sin_mejora_nl, sin_mejora_delta, div}`, y devuelve parámetros nuevos sin modificar sus argumentos.
+ 
+-**Inicialización**
++```
++si está explorando y div ≥ div_rec:            → EXPLOTAR (mutpb, indpb, k de la estática)
++si está explorando, o
++   (sin_mejora_nl ≥ ventana Y sin_mejora_delta ≥ ventana), o
++   div < div_min:                              → EXPLORAR
++        mutpb ← min(mutpb·factor, mutpb_max)
++        indpb ← min(indpb·factor, indpb_max)
++        k     ← k_explorar
++si no:                                         → sin cambios
++```
+ 
+-- random.seed(semilla): reproducibilidad.
+-- rng_div: generador aparte (semilla + 7919) para la diversidad.
+-- Crea N individuos como permutaciones barajadas de 0..255 y los evalúa. Como la semilla es la misma, ambas variantes arrancan con la misma población inicial (tu prueba lo verifica).
+-- hof = HallOfFame(1): guarda el mejor individuo histórico.
++La **histéresis** (entrar con `div_min`, salir con `div_rec`) evita que la regla se quede atorada en un modo; la primera versión sin histéresis exploraba ~80 % del tiempo y se comportaba como búsqueda aleatoria.
+ 
+-**Variables de control**: cxpb, mutpb, mejor_hist (mejor fitness visto) y sin_mejora (contador de estancamiento).
++### `_descendencia(pop, cxpb, mutpb, indpb, k, lam)`
++1. Selección por torneo de tamaño `k` (`selTournament`) y copias profundas.
++2. Cruce PMX (`cxPartialyMatched`) por parejas con probabilidad `cxpb`; preserva la permutación.
++3. Mutación `mutShuffleIndexes` con probabilidad `mutpb`; cada posición se intercambia con probabilidad `indpb`; también preserva la permutación.
++4. Evalúa solo los individuos que cambiaron (`not ind.fitness.valid`).
+ 
+-### Ciclo for g in range(G+1) (G+1 porque incluye la generación 0):
++### `correr(semilla, adaptativo, cfg, ruta_csv)`
++**Inicialización:** `random.seed(semilla)`, N permutaciones barajadas y evaluadas. Con la misma semilla, ambas variantes (y la búsqueda aleatoria) parten de la misma población. `HallOfFame(1)` guarda el mejor histórico.
+ 
+-1. Medición: toma el mejor, los fitness, y la diversidad.
+-2. Contador de estancamiento: si el mejor superó al histórico, lo actualiza y reinicia el contador; si no, suma 1. (Solo desde g > 0.)
+-3. Registro: guarda una fila con todas las métricas (la que va al CSV: variante, semilla, generación, fitness mejor/promedio, NL, δ, diversidad, sin_mejora, mutpb, cxpb). Si es la última generación, break.
+-4. Única diferencia entre variantes: si es adaptativa, actualiza mutpb.
+-5. Selección: torneo de tamaño k (elige k al azar y gana el mejor), y copias profundas para no modificar a los padres.
+-6. Cruce: recorre las parejas (off[0],off[1]), (off[2],off[3])...; con prob. cxpb aplica PMX (cruce parcialmente mapeado, que garantiza hijos que siguen siendo permutaciones) y borra el fitness para forzar reevaluación.
+-7. Mutación: con prob. mutpb aplica mutShuffleIndexes (intercambia posiciones con prob. indpb, también preserva la permutación).
+-8. Reevaluación solo de los que cambiaron (if not ind.fitness.valid), para ahorrar cómputo.
+-8. Elitismo: ordena la nueva generación de peor a mejor y reemplaza al peor por el mejor histórico, para que nunca se pierda lo ganado. Actualiza pop y hof.
++**Ciclo `for g in range(G + 1)`:**
++1. Mide: mejor individuo, fitness de la población y diversidad.
++2. Actualiza contadores (desde `g > 0`): `sin_mejora` (fitness del mejor), `sin_mejora_nl` (mejor NL de la población) y `sin_mejora_delta` (mejor δ de la población).
++3. Registra la fila del CSV (ver `Resultados/columnas_csv.md`). En la última generación termina.
++4. **Única diferencia entre variantes:** si es adaptativa, llama a `actualizar_parametros`. Al salir de explorar, los contadores de NL y δ se reinician (el estancamiento se mide desde cero).
++5. Genera la descendencia con los parámetros vigentes.
++6. Elitismo: el mejor histórico reemplaza al peor descendiente.
+ 
+-Salida: escribe el CSV (crea la carpeta si no existe) y devuelve el mejor individuo.##
+\ No newline at end of file
++**Salida:** escribe el CSV (saltos de línea LF) y devuelve el mejor individuo.
++
++## Garantías probadas (`tests/test_motor.py`)
++
++- Con `factor = 1.0` y `k_explorar = k` (control neutro), la adaptativa produce un CSV idéntico al de la estática, salvo la columna `variante`: la única diferencia entre variantes es el lazo.
++- La misma semilla da el mismo CSV; semillas distintas dan corridas distintas.
++- El elitismo funciona (el mejor siempre sigue en la población) y todo descendiente es una permutación con métricas vigentes.
++- La regla respeta los topes, no modifica sus argumentos, no explora si solo NL está estancado y no se queda atorada explorando.
+diff --git a/1_Documentacion/Principal/verificacion.md b/1_Documentacion/Principal/verificacion.md
+index f9d94ff..bd622cd 100644
+--- a/1_Documentacion/Principal/verificacion.md
++++ b/1_Documentacion/Principal/verificacion.md
+@@ -1,15 +1,22 @@
+-# verificacion.py (contraste independiente)
++# src/verificacion.py (Módulo 4: segunda implementación)
+ 
+-Recalcula NL y δ con algoritmos distintos para detectar errores del evaluador (mientras no tenga sboxU)
++**Para qué existe:** calcular NL y δ por un camino distinto al de `evaluador.py`, para detectar errores de implementación. Si dos programas escritos de forma distinta coinciden siempre, es poco probable que ambos tengan el mismo error.
+ 
+-### delta_directo(sbox)
++## Funciones
+ 
+-Python puro, tres ciclos: para cada dx de 1 a 255, cuenta en una lista cuántas veces sale cada diferencia de salida, y se queda con el máximo global. Es la definición literal de δ, lenta pero obviamente correcta.
++| Función | Método | Diferencia con el evaluador |
++|---|---|---|
++| `delta_directo(sbox)` | Para cada `dx ≠ 0`, cuenta los pares `S(x) ⊕ S(x ⊕ dx)` en una lista, en Python puro. | Sin NumPy, sin armar la DDT completa. |
++| `_fwht(v)` | Transformada rápida de Walsh-Hadamard (mariposas, O(n log n)). | El evaluador usa multiplicación matricial. |
++| `nl_fwht(sbox)` | Una FWHT por cada función componente `b·S` con `b ≠ 0`; NL = `128 − max|W| / 2`. | Recorre por función componente, no por matriz completa. |
++| `metricas_sboxu(sbox)` | Llama a `sboxU.linearity` y `sboxU.differential_uniformity`; NL = `128 − linearity / 2`. | Implementación externa, escrita por otros autores. |
+ 
+-### _fwht(v): transformada rápida de Walsh-Hadamard
++## sboxU
+ 
+-Algoritmo tipo mariposa: en cada nivel h = 1, 2, 4, ... combina pares (a, b) → (a+b, a−b). Calcula en O(n log n) lo que el evaluador hace con una matriz O(n²). Sin normalizar.
++- sboxU 2.x solo funciona con SageMath, por eso no está en `requirements.txt`.
++- Se instala en Colab en un entorno aparte (micromamba + Sage de conda-forge), siguiendo `notebooks/colab_verificacion_sboxu.ipynb`.
++- `tests/test_sboxu.py` usa `importorskip`: se salta si no hay Sage y pasa cuando sí lo hay.
+ 
+-### nl_fwht(sbox)
++## Limitación
+ 
+-Para cada máscara de salida b = 1..255, construye la función componente f(x) = (-1)^(b·S(x)) (paridad de S(x) & b), le aplica la FWHT, y toma el máximo valor absoluto. NL = 128 − max//2.
++`evaluador.py` y `verificacion.py` los escribió el mismo equipo. La verificación realmente independiente es sboxU (ver `Experimentos/contraste.md`).
+diff --git a/1_Documentacion/Referencias/literatura_nl_delta.md b/1_Documentacion/Referencias/literatura_nl_delta.md
+new file mode 100644
+index 0000000..051381f
+--- /dev/null
++++ b/1_Documentacion/Referencias/literatura_nl_delta.md
+@@ -0,0 +1,50 @@
++# Valores de NL y δ reportados en la literatura (S-boxes biyectivas de 8×8)
++
++Pendiente heredado de la Fase 1: tener valores de referencia, además de AES, para ubicar los resultados del AG en la discusión.
++
++> **Antes de citar en el informe:** la columna "Fuente del dato" indica si el valor se tomó del artículo original o de otro artículo que lo cita. Los marcados como *secundaria* deben confirmarse en el artículo original (tabla de resultados) antes de usarlos.
++
++## Tabla de referencia
++
++| Método | Autores | NL | δ | Presupuesto aprox. | Fuente del dato |
++|---|---|---|---|---|---|
++| Inverso en GF(2⁸) + afín (AES) | Daemen y Rijmen (2002) | 112 | 4 | Construcción algebraica | Primaria (y regresión del proyecto) |
++| Búsqueda pseudoaleatoria | Varios (resumen de Ivanov et al.) | 94 – 100 | 8 | — | Secundaria [1] |
++| Heurísticas (HC, SA, GA) en general | Varios (resumen de Ivanov et al.) | 98 – 104 | 6 | — | Secundaria [1] |
++| Hill climbing / GA + HC | Millan et al. | 100 | n. r. | — | Secundaria [2] |
++| Recocido simulado con función de costo WHS | Clark, Jacob y Stepney (2004/2005) | 102 | n. r. | — | Secundaria [2][3] |
++| GA + búsqueda en árbol (GaT), costo de Clark afinado | Tesař (2010) | 104 | n. r. | — | Secundaria [3][4] |
++| Nueva función de costo (GA / búsqueda local) | Picek, Čupić y Rotim (2016) | **pendiente** | **pendiente** | — | Confirmar en la tabla de resultados del artículo [5] |
++| GA + costo WHS | Kuznetsov et al. (2024) | 104 | n. r. | ≈ 49,400 iteraciones (media) | Primaria [6] |
++| GA "en reversa" (δ en el fitness) | Ivanov, Nikolov y Nikova | 110 | 4 | — | Primaria (presentación) [1] |
++| GA adaptativo híbrido con búsqueda local (HAGA) | Behera y Gangopadhyay (2023) | 108 | 6 | — | Primaria (resumen) [7] |
++| GA con operadores nuevos (uniformidad boomerang) | Kang y Wang (2022) | 108 | 6 | — | Primaria (resumen) [8] |
++| **Este proyecto, mejor de 100 corridas** | Estática (1008) y adaptativa (1036) | **100** | **8** | ≤ 10,100 evaluaciones | `resultados/cifrado/comparacion_sboxes.csv` |
++| **Este proyecto, media** | Estática / adaptativa | 98.58 / 98.16 | 9.44 / 9.34 | ≤ 10,100 evaluaciones | `resultados/final/analisis/descriptiva.csv` |
++
++n. r.: no reportado en la fuente consultada.
++
++## Lectura para la discusión
++
++1. **Dónde quedan los resultados.** El mejor NL del proyecto (100) está al nivel de la búsqueda pseudoaleatoria y de las primeras heurísticas, y por debajo del referente habitual de la literatura para métodos heurísticos (NL = 104). Picek et al. (2017) señalan que incluso los mejores resultados heurísticos de 8×8 están lejos de NL = 112 y δ = 4 [9], lo que es coherente con tomar AES como cota y no como objetivo.
++2. **Presupuesto.** Cada corrida del proyecto evalúa como máximo N × (G + 1) = 10,100 S-boxes. Los métodos que alcanzan 104 reportan del orden de 50,000 a 1,000,000 de evaluaciones. La comparación con la literatura no es en igualdad de presupuesto.
++3. **Función de costo.** Los trabajos que llegan a 104 no optimizan NL directamente, sino funciones de costo sobre todo el espectro de Walsh-Hadamard (Clark, Picek, Freyre-Echevarría), porque NL solo mira el peor coeficiente y deja una superficie de búsqueda con mesetas grandes. El fitness del proyecto (`NL − 2(δ − 4)`) hereda esas mesetas, lo que concuerda con los muchos empates observados. Esto es una explicación posible del techo en NL = 100, no un hecho probado, y es una línea natural de trabajo futuro.
++4. **Umbral práctico.** Un artículo sobre construcción de S-boxes biyectivas considera "fuertes" a las de 8×8 con δ ≤ 10 y NL ≥ 100 [10]. Las mejores S-boxes del proyecto (100, 8) cumplen ese umbral; la media de las corridas (≈ 98.5, ≈ 9.4) no lo cumple en NL.
++5. **Lo que no cambia.** Nada de esto afecta la prueba de H1, que compara dos variantes bajo las mismas condiciones; solo ubica el nivel absoluto de ambas.
++
++## Fuentes
++
++1. Ivanov, G., Nikolov, N. y Nikova, S. *Generation of good bijective S-boxes using a Reversed Genetic Algorithm* (presentación). https://org.uib.no/selmer/people/lbu061/nikova.pdf
++2. Clark, J. A., Jacob, J. L. y Stepney, S. (2005). The design of S-boxes by simulated annealing. *New Generation Computing*, 23, 219-231. https://doi.org/10.1007/BF03037656 (valores de HC y GA/HC tomados de una tabla de un artículo que lo cita: https://scite.ai/reports/the-design-of-s-boxes-by-05PQnb)
++3. Freyre-Echevarría, A. et al. (2020). An external parameter independent novel cost function for evolving bijective substitution-boxes. *Symmetry*, 12(11), 1896. https://doi.org/10.3390/sym12111896
++4. Djurasevic, M., Jakobovic, D., Mariot, L., Mesnager, S. y Picek, S. (2022). On the evolution of boomerang uniformity in cryptographic S-boxes (sección de trabajo relacionado). https://arxiv.org/abs/2212.04789
++5. Picek, S., Čupić, M. y Rotim, L. (2016). A new cost function for evolution of S-boxes. *Evolutionary Computation*, 24(4), 695-718. https://doi.org/10.1162/EVCO_a_00191
++6. Kuznetsov, O., Poluyanenko, N., Frontoni, E., Arnesano, M. y Smirnov, O. (2024). Evolutionary approach to S-box generation: optimizing nonlinear substitutions in symmetric ciphers. https://arxiv.org/abs/2407.03510
++7. Behera, P. K. y Gangopadhyay, S. (2023). Evolving bijective S-boxes using hybrid adaptive genetic algorithm with optimal cryptographic properties. *Journal of Ambient Intelligence and Humanized Computing*, 14(3), 1713-1730. https://doi.org/10.1007/s12652-021-03392-6
++8. Kang, M. y Wang, M. (2022). New genetic operators for developing S-boxes with low boomerang uniformity. *IEEE Access*, 10, 10898-10906. https://doi.org/10.1109/ACCESS.2022.3144458
++9. Picek, S., Mariot, L., Leporati, A. y Jakobovic, D. (2017). Evolving S-boxes based on cellular automata with genetic programming. *GECCO '17 Companion*. https://www.human-competitive.org/sites/default/files/picek-paper-1-gecco.pdf
++10. *Practical bijective S-box design* (2013). https://arxiv.org/abs/1301.4723
++
++## Relevancia especial de Behera y Gangopadhyay (2023)
++
++Es un **GA adaptativo** para S-boxes de 8×8 con NL y δ, es decir, el trabajo más cercano a la variante adaptativa del proyecto. No está en las fuentes del protocolo V4; conviene leerlo y agregarlo al marco de referencia del informe (sección 2.2), aunque sea para marcar la diferencia: ellos combinan adaptación con búsqueda local, mientras que aquí la adaptación es el único factor que cambia entre variantes.
+diff --git a/1_Documentacion/Resultados/columnas_csv.md b/1_Documentacion/Resultados/columnas_csv.md
+new file mode 100644
+index 0000000..45e9739
+--- /dev/null
++++ b/1_Documentacion/Resultados/columnas_csv.md
+@@ -0,0 +1,30 @@
++# Columnas de los CSV de corridas
++
++Cada corrida (`resultados/<dir>/<variante>_<semilla>.csv`) tiene G + 1 filas: la generación 0 (población inicial) y las G generaciones evolucionadas. Los CSV no se editan a mano. Saltos de línea LF.
++
++| Columna | Qué es |
++|---|---|
++| `variante`, `semilla` | Identifican la corrida; constantes en todo el archivo. |
++| `generacion` | 0 … G. |
++| `fit_mejor` | Fitness del mejor individuo histórico (Hall of Fame). Nunca baja (elitismo). Es el valor que entra a la prueba de H1 en la última fila. |
++| `fit_max_pob` | Máximo fitness de la población en esa generación. Debe ser igual a `fit_mejor` (prueba del elitismo). |
++| `fit_prom` | Fitness promedio de la población. |
++| `nl_mejor`, `delta_mejor` | NL y δ del mejor individuo histórico. |
++| `nl_max_pob`, `delta_min_pob` | Mejor NL y mejor δ de la población (pueden ser de individuos distintos). Son las señales de los contadores de la adaptativa. |
++| `nl_prom`, `delta_prom` | NL y δ promedio de la población. |
++| `diversidad` | Distancia de Hamming media normalizada sobre 100 pares (0 = clones, ≈ 1 = muy distintos). |
++| `sin_mejora` | Generaciones consecutivas sin que mejore `fit_mejor`. |
++| `sin_mejora_nl`, `sin_mejora_delta` | Generaciones consecutivas sin que mejore el mejor NL / el mejor δ de la población. Se reinician al salir de explorar. |
++| `mutpb`, `indpb`, `k`, `cxpb` | Parámetros vigentes. En la estática son constantes (0.4, 0.02, 5, 0.9). En la adaptativa, `k = 3` indica modo explorar. |
++
++La búsqueda aleatoria usa un esquema reducido: `variante, semilla, generacion, fit_mejor, fit_max_pob, fit_prom, nl_mejor, delta_mejor, nl_prom, delta_prom`. Ahí `fit_max_pob` es el máximo del lote de N permutaciones de esa "generación" (puede ser menor que `fit_mejor`, que es el mejor acumulado). No tiene diversidad ni parámetros porque no evoluciona.
++
++## Archivos auxiliares de `resultados/final/`
++
++| Archivo | Contenido |
++|---|---|
++| `meta.json` | Configuración, semillas, commit (`6334e2f`, etiqueta `congelado-v1`), fechas y versión de Python. |
++| `entorno.txt` | `pip freeze` del entorno. |
++| `sboxes/<variante>_<semilla>.json` | Mejor S-box de la corrida, con NL, δ y fitness. |
++| `analisis_salida.txt` | Salida en consola de `analisis/estadistica.py`. |
++| `analisis/` | Tablas CSV y gráficas de convergencia. |
+diff --git a/1_Documentacion/Test/medir_velocidad.md b/1_Documentacion/Test/medir_velocidad.md
+deleted file mode 100644
+index e69de29..0000000
+diff --git a/1_Documentacion/Test/pruebas.md b/1_Documentacion/Test/pruebas.md
+new file mode 100644
+index 0000000..05f9ae3
+--- /dev/null
++++ b/1_Documentacion/Test/pruebas.md
+@@ -0,0 +1,43 @@
++# Pruebas automáticas (tests/)
++
++Se ejecutan con `python -m pytest -q` desde la raíz. Estado al cierre de la Fase 6: **126 pasan y 1 se salta** (`test_sboxu.py`, que necesita Sage; en el entorno de Sage en Colab pasa).
++
++Además de las pruebas, en las Fases 2b, 4, 5a y 5b se hicieron **pruebas de mutación manuales**: se rompió el código a propósito (sin elitismo, sin histéresis, contadores al revés, Holm mal aplicado, bootstrap no pareado, comparación de hash siempre verdadera, etc.) y se comprobó que alguna prueba fallara. Las mutaciones que sobrevivían dieron lugar a pruebas nuevas.
++
++## Correspondencia con el plan de pruebas del protocolo (5.1.1)
++
++| Nivel del protocolo | Dónde se cubre |
++|---|---|
++| Unitaria (GF(2⁸), valores conocidos de AES, permutación) | `test_gf256.py` |
++| Regresión (NL = 112, δ = 4 en AES) | `test_evaluador.py` |
++| Contraste (cero discrepancias con sboxU) | `test_evaluador.py` (interno), `test_sboxu.py`, `test_contraste_final.py` |
++| Propiedad (todo descendiente es permutación) | `test_motor.py::test_operadores_preservan_permutacion`, `test_descendencia_tiene_metricas_y_fitness_vigentes` |
++| Reproducibilidad (misma semilla, mismo CSV) | `test_motor.py`, `test_correr_todo.py`, `test_aleatoria.py` |
++| Integración (corrida corta sin errores) | `test_motor.py::test_corrida_corta_y_valida`, `test_correr_todo.py`, `--smoke` |
++| Funcional (cifrar y descifrar con SHA-256 idéntico) | `test_cifrado.py`, `test_cifrar_archivos.py` |
++
++## Archivo por archivo
++
++| Archivo | Pruebas | Qué cubre |
++|---|---|---|
++| `test_gf256.py` | 4 | Valores de FIPS-197, permutación, inverso, `{57}·{83} = {c1}`. |
++| `test_evaluador.py` | 9 | Regresión AES, identidad lineal, filas de la DDT, contraste con `verificacion.py`, fitness, sesgo lineal y probabilidad diferencial. |
++| `test_ejemplo_4x4.py` | 7 | La S-box de PRESENT cumple los criterios de Bogdanov et al. (2007, sec. 4.3) y los valores de Walsh de un bit que reporta Ohkuma (2009); la identidad no los cumple. |
++| `test_motor.py` | 26 | Reproducibilidad, misma población inicial, esquema del CSV, elitismo, consistencia de métricas, la regla adaptativa caso por caso (estancamiento, diversidad, topes, histéresis, función pura), **identidad con la estática bajo control neutro**, operadores que preservan la permutación. |
++| `test_aleatoria.py` | 5 | Búsqueda aleatoria reproducible, mismo punto de partida que el AG, presupuesto y esquema. |
++| `test_calibracion_estatica.py` | 4 | Regla de elección y desempate de la rejilla de la estática. |
++| `test_calibracion_adaptativa.py` | 5 | Compuerta, regla de elección y desempate de la rejilla de la adaptativa. |
++| `test_correr_todo.py` | 12 | Corridas completas, reanudación sin repetir, paralelo = secuencial, no mezcla configuraciones, `config.py` = congelada, modo suplementario aislado. |
++| `test_estadistica.py` | 13 | Holm con ejemplo conocido, Cliff, sentido de las pruebas, IC bootstrap pareado y reproducible, mecanismo, análisis de punta a punta y gráficas. |
++| `test_contraste_final.py` | 6 | Detecta valores guardados incorrectos y S-boxes que no son permutación; cada implementación cuenta. |
++| `test_cifrado.py` | 6 | Ida y vuelta con SHA-256, inversa, valores de AES, rechazo de S-boxes inválidas, archivo de 3 MB. |
++| `test_cifrar_archivos.py` | 16 | Muestras deterministas (firma PNG, ELF), regla de la mejor S-box con empates, detección de descifrado corrupto, hash que no coincide y ejecutable que no corre. |
++| `test_sboxu.py` | 1 | sboxU coincide en AES (se salta sin Sage). |
++
++## Script de medición
++
++`tests/medir_velocidad.py` no es una prueba: mide los milisegundos por evaluación del fitness (riesgo R2). Laptop: ≈ 10.3 ms; Colab: ≈ 2.8 ms.
++
++```
++PYTHONPATH=. python tests/medir_velocidad.py
++```
+diff --git a/1_Documentacion/Test/test_evaluador.md b/1_Documentacion/Test/test_evaluador.md
+deleted file mode 100644
+index e69de29..0000000
+diff --git a/1_Documentacion/Test/test_gf256.md b/1_Documentacion/Test/test_gf256.md
+deleted file mode 100644
+index e69de29..0000000
+diff --git a/1_Documentacion/Test/test_motor.md b/1_Documentacion/Test/test_motor.md
+deleted file mode 100644
+index e69de29..0000000
+diff --git a/README.md b/README.md
+index ceb4461..ecfc56d 100644
+--- a/README.md
++++ b/README.md
+@@ -122,7 +122,7 @@ sbox-ga/
+ │
+ ├── evidencia/                    # Salidas de las verificaciones hechas en Colab (sboxU, reproducibilidad)
+ │
+-├── 1_Documentacion/              # Documentación (pendiente de regenerar, Fase 6)
++├── 1_Documentacion/              # Explicación de cada archivo y referencias (ver INDICE.md)
+ │
+ └── notebooks/
+     ├── colab_main.ipynb                 # Clona el repositorio y ejecuta en Google Colab
+@@ -234,9 +234,13 @@ Limitación: el evaluador y `verificacion.py` los escribió el mismo equipo, por
+ - [x] Fase 5a: corridas finales, contraste con sboxU y experimento suplementario
+ - [x] Fase 5b: cifrado de archivos binarios con las S-boxes generadas
+ - [ ] Fase 6: análisis de resultados y documento final
+-  - Regenerar `1_Documentacion/` (está desactualizada respecto al código).
+-  - Confirmar con el asesor: λ fijo en 2 y cómo se reporta el resultado negativo de H1.
+-  - Redactar el informe final (entrega: 6 de diciembre).
++  - [x] Regenerar `1_Documentacion/` al día con el código.
++  - [x] Contrastar el ejemplo 4x4 (PRESENT) con el artículo.
++  - [x] Reunir valores de NL y δ de la literatura (`1_Documentacion/Referencias/literatura_nl_delta.md`).
++  - [ ] Confirmar en el artículo de Picek et al. (2016) sus valores de NL y δ para 8x8 (y los marcados como fuente secundaria).
++  - [ ] Confirmar con el asesor: λ fijo en 2 y cómo se reporta el resultado negativo de H1.
++  - [ ] Revisión cruzada (PR) de las ramas e integración a `main`.
++  - [ ] Redactar el informe final (entrega: 6 de diciembre).
+ 
+ ## 8.1 Bitácora de fases
+ 
+@@ -277,13 +281,13 @@ Comando usado: %env PYTHONPATH=. y !python tests/medir_velocidad.py
+ **Supuestos y decisiones**
+ - inv(0) = 0, por convención de AES.
+ - LAMBDA = 2.0 es provisional. Se calibra en las corridas preliminares y se congela antes de las corridas finales (riesgo R7). Nota: aquí se hablaba de 60 corridas finales (valor inicial); luego se amplió a 300 corridas (100 semillas × 3 variantes), ver Fase 5a.
+-- La DDT 4x4 usa la S-box de PRESENT (Bogdanov et al., 2007). [PENDIENTE: contrastar los valores de analisis/ejemplo_4x4.py con la tabla del artículo.]
++- La DDT 4x4 usa la S-box de PRESENT (Bogdanov et al., 2007). Resuelto en la Fase 6: el artículo no publica la DDT completa, así que se comprueban sus criterios de diseño (sección 4.3).
+ 
+ **Hito:** regresión con AES aprobada, por lo que se puede avanzar a la Fase 2.
+ 
+ **Pendientes heredados**
+ - Definir con el asesor cómo se hará el contraste con sboxU (requiere Sage). Resuelto en la Fase 5a.
+-- Agregar como referencia valores de NL y δ reportados en la literatura (Picek et al., 2016; Clark et al., 2004), extraídos directamente de los artículos.
++- Agregar como referencia valores de NL y δ reportados en la literatura (Picek et al., 2016; Clark et al., 2004), extraídos directamente de los artículos. Resuelto en la Fase 6 (parcial: el valor de Picek et al. falta confirmarlo en el artículo).
+ 
+ ---
+ 
+@@ -643,6 +647,37 @@ Adaptativa − estática en G = 300: fitness +0.05 [−0.70, 0.80]; δ −0.25 [
+ 
+ ---
+ 
++### Fase 6: pendientes, documentación y referencias
++
++**Fecha:** 15 de noviembre, 2026
++
++**Rama:** fase-6-pendientes
++
++**Responsables:** Christian Regina Rodríguez Magaña
++
++**Revisión:** SIN REVISION
++
++**Qué se hizo**
++- `analisis/ejemplo_4x4.py`: el artículo de PRESENT (Bogdanov et al., 2007) da la S-box pero **no publica la DDT completa**, así que el ejemplo ahora comprueba los cuatro criterios de diseño de su sección 4.3: δ ≤ 4, DDT = 0 entre diferencias de un bit, |W| ≤ 8 y |W| ≤ 4 entre máscaras de un bit. Los cuatro se cumplen.
++- Hallazgo: el artículo escribe el cuarto criterio como "W = ±4", pero la S-box publicada tiene coeficientes 0 en las máscaras que tocan el bit 0. Ohkuma (2009, "Weak Keys of Reduced-Round PRESENT for Linear Cryptanalysis", SAC 2009, sec. 3.1) reporta lo mismo. Se comprueba |W| ≤ 4, que equivale al sesgo ≤ 2^-3 del apéndice del artículo.
++- `tests/test_ejemplo_4x4.py`: 7 pruebas nuevas (incluye que la identidad no cumple ningún criterio).
++- `1_Documentacion/` regenerada: un archivo por módulo de `src/`, por grupo de experimentos, por el análisis, por las columnas de los CSV y por las pruebas, con correspondencia contra los módulos y el plan de pruebas del protocolo. Se quitaron los cuatro archivos vacíos de `Test/`.
++- `1_Documentacion/Referencias/literatura_nl_delta.md`: tabla de NL y δ reportados para S-boxes biyectivas de 8x8 (pseudoaleatoria 94 a 100; heurísticas 98 a 104; Clark et al. 102; Tesař 104; GA adaptativo híbrido de Behera y Gangopadhyay, 2023, NL 108 y δ 6), indicando qué valores vienen de fuente primaria y cuáles de una cita secundaria.
++
++**Pruebas** (python -m pytest -q): 126 pasan y 1 se salta (sboxU).
++
++**Lectura para la discusión (no cambia H1)**
++- El mejor resultado del proyecto (NL = 100, δ = 8) está al nivel de la búsqueda pseudoaleatoria y de las primeras heurísticas, y por debajo del referente de 104. Los métodos que llegan a 104 usan 5 a 100 veces más evaluaciones y funciones de costo sobre todo el espectro de Walsh, no NL directamente.
++- Behera y Gangopadhyay (2023) es el trabajo más cercano a la variante adaptativa y no está en el protocolo V4; conviene agregarlo al marco de referencia.
++
++**Pendientes**
++- Confirmar en el artículo de Picek et al. (2016) sus valores para 8x8, y los marcados como fuente secundaria.
++- Confirmar con el asesor: λ fijo en 2 y cómo se reporta el resultado negativo de H1.
++- Revisión cruzada (PR) de las ramas e integración a `main`.
++- Informe final.
++
++---
++
+ ## 9. Referencias principales
+ 
+ - Hevner, A. R., March, S. T., Park, J., y Ram, S. (2004). Design science in information systems research. MIS Quarterly, 28(1), 75-105.
+diff --git a/analisis/ejemplo_4x4.py b/analisis/ejemplo_4x4.py
+index 4623e42..80d2550 100644
+--- a/analisis/ejemplo_4x4.py
++++ b/analisis/ejemplo_4x4.py
+@@ -1,18 +1,67 @@
+ '''
+-Ejemplo didáctico: DDT de una S-box de 4 bits (la de PRESENT)
+-NO es la evaluación del proyecto
++Ejemplo didáctico: DDT de una S-box de 4 bits (la de PRESENT).
++NO es la evaluación del proyecto.
++
++Fuente: Bogdanov et al. (2007), "PRESENT: An Ultra-Lightweight Block Cipher",
++CHES 2007, LNCS 4727, pp. 450-466. https://doi.org/10.1007/978-3-540-74735-2_31
++
++El artículo da la S-box (sección 3) pero no publica la DDT completa. Lo que sí
++publica son los criterios de diseño de la sección 4.3, que se comprueban aquí:
++  C1. Para todo dx != 0 y dy != 0: DDT[dx][dy] <= 4  (delta = 4; prob. máx. 2^-2, sección 5.1)
++  C2. Si wt(dx) = wt(dy) = 1: DDT[dx][dy] = 0
++  C3. Para todo a != 0 y b != 0: |W_b(a)| <= 8
++  C4. Si wt(a) = wt(b) = 1: |W_b(a)| <= 4
++      El artículo escribe "= ±4", pero la S-box publicada no lo cumple literalmente:
++      los coeficientes que involucran el bit 0 valen 0. Ohkuma (2009, "Weak Keys of
++      Reduced-Round PRESENT for Linear Cryptanalysis", SAC 2009, LNCS 5867, sec. 3.1)
++      lo confirma: las máscaras de un bit no incluyen el bit 0 y su desviación
++      absoluta es 2^-3 (|W| = 4). Lo que se cumple, y se comprueba, es |W| <= 4,
++      equivalente al sesgo <= 2^-3 del apéndice del artículo.
+ '''
+ 
+ S = [0xC, 0x5, 0x6, 0xB, 0x9, 0x0, 0xA, 0xD, 0x3, 0xE, 0xF, 0x8, 0x4, 0x7, 0x1, 0x2]
+ n = len(S)
+ 
+-T = [[0] * n for _ in range(n)]
+-for dx in range(n):
+-    for x in range(n):
+-        T[dx][S[x] ^ S[x ^ dx]] += 1
+ 
+-print("DDT 4x4 (filas: dx, columnas: dy)")
+-for dx in range(n):
+-    print(f"{dx:2d} | " + " ".join(f"{v:2d}" for v in T[dx]))
++def peso(v):
++    return bin(v).count("1")
++
++
++def ddt(s):
++    t = [[0] * len(s) for _ in s]
++    for dx in range(len(s)):
++        for x in range(len(s)):
++            t[dx][s[x] ^ s[x ^ dx]] += 1
++    return t
++
++
++def walsh(s):
++    # W[b][a] = suma_x (-1)^(b·S(x) xor a·x)
++    m = len(s)
++    return [[sum(-1 if (peso(b & s[x]) + peso(a & x)) % 2 else 1 for x in range(m))
++             for a in range(m)] for b in range(m)]
++
++
++def criterios_present(s):
++    t, w = ddt(s), walsh(s)
++    m = len(s)
++    nz = range(1, m)
++    uno = [v for v in nz if peso(v) == 1]
++    return {
++        "C1_delta_max_4": max(t[dx][dy] for dx in nz for dy in nz) <= 4,
++        "C2_un_bit_a_un_bit_es_0": all(t[dx][dy] == 0 for dx in uno for dy in uno),
++        "C3_walsh_max_8": max(abs(w[b][a]) for a in nz for b in nz) <= 8,
++        "C4_walsh_un_bit_max_4": all(abs(w[b][a]) <= 4 for a in uno for b in uno),
++    }
++
+ 
+-print("delta =", max(max(fila) for fila in T[1:]))
+\ No newline at end of file
++if __name__ == "__main__":
++    T = ddt(S)
++    print("DDT 4x4 (filas: dx, columnas: dy)")
++    for dx in range(n):
++        print(f"{dx:2d} | " + " ".join(f"{v:2d}" for v in T[dx]))
++    print("delta =", max(max(fila) for fila in T[1:]))
++    print()
++    print("Criterios de diseño de PRESENT (Bogdanov et al., 2007, sección 4.3):")
++    for k, ok in criterios_present(S).items():
++        print(f"  {k}: {'cumple' if ok else 'NO CUMPLE'}")
+diff --git a/tests/test_ejemplo_4x4.py b/tests/test_ejemplo_4x4.py
+new file mode 100644
+index 0000000..25ee4a1
+--- /dev/null
++++ b/tests/test_ejemplo_4x4.py
+@@ -0,0 +1,41 @@
++"""El ejemplo 4x4 (S-box de PRESENT) cumple los criterios publicados por
++Bogdanov et al. (2007, sección 4.3), y la verificación detecta S-boxes que no."""
++from analisis.ejemplo_4x4 import S, ddt, walsh, criterios_present
++
++
++def test_sbox_present_es_permutacion():
++    assert sorted(S) == list(range(16))
++
++
++def test_present_cumple_criterios_del_articulo():
++    assert all(criterios_present(S).values())
++
++
++def test_delta_present_es_4():
++    t = ddt(S)
++    assert max(max(f) for f in t[1:]) == 4
++
++
++def test_ddt_filas_suman_16():
++    assert all(sum(f) == 16 for f in ddt(S))
++
++
++def test_walsh_fila_cero_es_trivial():
++    w = walsh(S)
++    assert w[0][0] == 16 and all(v == 0 for v in w[0][1:])
++
++
++def test_identidad_no_cumple():
++    # La identidad es lineal: delta = 16 y Walsh = ±16, falla C1 a C4.
++    c = criterios_present(list(range(16)))
++    assert not any(c.values())
++
++
++def test_walsh_un_bit_coincide_con_ohkuma_2009():
++    # Máscaras de un bit: |W| es 0 o 4, y ninguna con |W| = 4 toca el bit 0.
++    w = walsh(S)
++    for a in (1, 2, 4, 8):
++        for b in (1, 2, 4, 8):
++            assert abs(w[b][a]) in (0, 4)
++            if abs(w[b][a]) == 4:
++                assert 1 not in (a, b)
