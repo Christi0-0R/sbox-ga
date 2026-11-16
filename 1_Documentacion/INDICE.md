@@ -35,6 +35,7 @@ config.py ──► motor_ga.py ──► resultados/final/<variante>_<semilla>.
 | `Analisis/estadistica.md` | Módulo 6: pruebas estadísticas, tablas y gráficas |
 | `Resultados/columnas_csv.md` | Qué significa cada columna de los CSV de corridas |
 | `Resultados/Prelim/estatica_1.md` | Histórico: CSV de la Fase 2 (N = 30, G = 50), ya no vigente |
+| `Resultados/resultados_finales.md` | Resultados finales del prototipo |
 | `Test/pruebas.md` | Qué cubre cada archivo de pruebas |
 | `Referencias/literatura_nl_delta.md` | Valores de NL y δ reportados en la literatura, para la discusión |
 
